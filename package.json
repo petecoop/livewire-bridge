@@ -1,0 +1,44 @@
+{
+    "name": "@petecoop/livewire-vite-react",
+    "version": "0.0.0",
+    "description": "Vite-powered component scripts and React integration for Livewire.",
+    "license": "MIT",
+    "type": "module",
+    "publishConfig": {
+        "access": "public"
+    },
+    "sideEffects": false,
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/runtime.d.ts",
+            "import": "./dist/runtime.js"
+        },
+        "./vite": {
+            "types": "./dist/vite.d.ts",
+            "import": "./dist/vite.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "scripts": {
+        "build": "tsdown",
+        "dev": "tsdown --watch",
+        "prepublishOnly": "npm run build"
+    },
+    "peerDependencies": {
+        "react": ">=18.0.0",
+        "react-dom": ">=18.0.0",
+        "vite": ">=6.0.0"
+    },
+    "devDependencies": {
+        "@types/node": "^26.1.1",
+        "@types/react": "^19.0.0",
+        "react": "^19.2.0",
+        "react-dom": "^19.2.0",
+        "tsdown": "latest",
+        "typescript": "^6.0.3",
+        "vite": "^8.0.0"
+    }
+}

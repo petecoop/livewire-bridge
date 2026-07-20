@@ -1,0 +1,14 @@
+# Composer / Laravel distribution
+/composer.json
+/config/
+/src/
+
+# Package development
+/.gitattributes
+/.gitignore
+/.github/
+/tests/
+/package-lock.json
+/tsconfig.json
+/tsdown.config.ts
+

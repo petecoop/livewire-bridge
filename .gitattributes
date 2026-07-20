@@ -1,0 +1,19 @@
+# npm / JavaScript distribution
+/dist export-ignore
+/node_modules export-ignore
+/package.json export-ignore
+/package-lock.json export-ignore
+/tsconfig.json export-ignore
+/tsdown.config.ts export-ignore
+/src/*.ts export-ignore
+/src/entries export-ignore
+
+# Repository-only files
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/.npmignore export-ignore
+/.github export-ignore
+/tests export-ignore
+/phpunit.xml export-ignore
+/phpunit.xml.dist export-ignore
+
