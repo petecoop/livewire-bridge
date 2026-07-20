@@ -191,7 +191,8 @@ export default function livewireViteReact(
                 ? null
                 : extractScriptDefinition(previousSource);
             const nextDefinition = extractScriptDefinition(nextSource);
-            const scriptOnlyChange = previousDefinition !== null
+            const scriptOnlyChange = previousSource !== undefined
+                && previousDefinition !== null
                 && nextDefinition !== null
                 && previousDefinition.type === nextDefinition.type
                 && previousDefinition.ref === nextDefinition.ref

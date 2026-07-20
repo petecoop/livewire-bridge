@@ -1,9 +1,9 @@
 import {
     createContext,
     createElement,
-    useCallback,
     useContext,
-    useEffect,
+    useLayoutEffect,
+    useMemo,
     useRef,
     useSyncExternalStore,
     type ReactElement,
@@ -12,33 +12,71 @@ import {
 
 export type Wire = Record<string, any> & {
     __instance?: LivewireComponent | (() => LivewireComponent);
-    $watch?: (property: string, callback: () => void) => () => void;
 };
-
-export type WireSelector<TSelected, TWire extends Wire = Wire> = (
-    $wire: TWire,
-) => TSelected;
 
 type LivewireComponent = {
     reactive: Record<string, unknown>;
 };
 
+type AlpineEffectRunner = object | (() => void);
+
+type AlpineRuntime = {
+    effect: (callback: () => void) => AlpineEffectRunner;
+    release: (runner: AlpineEffectRunner) => void;
+};
+
 type WireStore = {
     $wire: Wire;
-    destroy: () => void;
-    getVersion: () => number;
-    subscribe: (listener: () => void, selector?: WireSelector<unknown>) => () => void;
+    alpine: AlpineRuntime;
+    reactive: Record<string, unknown>;
 };
+
+type WireSubscription = {
+    $wire: Wire;
+    beginRender: () => void;
+    commitRender: () => void;
+    getSnapshot: () => number;
+    subscribe: (listener: () => void) => () => void;
+};
+
+type ReactivePath = readonly string[];
 
 const WireContext = createContext<WireStore | null>(null);
 
 function createWireStore($wire: Wire): WireStore {
-    const listeners = new Set<() => void>();
-    const watchCleanups = new Set<() => void>();
     const instance = $wire.__instance;
     const component = typeof instance === "function" ? instance() : instance;
+    const alpine = (globalThis as typeof globalThis & {
+        Alpine?: Partial<AlpineRuntime>;
+    }).Alpine;
+
+    if (!component?.reactive) {
+        throw new Error("The Livewire component reactive state is unavailable");
+    }
+
+    if (typeof alpine?.effect !== "function" || typeof alpine.release !== "function") {
+        throw new Error("Livewire's Alpine effect runtime is unavailable");
+    }
+
+    return {
+        $wire,
+        alpine: alpine as AlpineRuntime,
+        reactive: component.reactive,
+    };
+}
+
+function createTrackedSubscription<TWire extends Wire>(
+    store: WireStore,
+): WireSubscription {
+    const listeners = new Set<() => void>();
+    const proxyCache = new WeakMap<object, Map<string, object>>();
+    let renderPaths = new Map<string, ReactivePath>();
+    let committedPaths = new Map<string, ReactivePath>();
+    let collecting = false;
+    let effectRunner: AlpineEffectRunner | null = null;
+    let effectGeneration = 0;
+    const queuedGenerations = new Set<number>();
     let version = 0;
-    let notificationQueued = false;
 
     const notify = (): void => {
         version += 1;
@@ -48,89 +86,206 @@ function createWireStore($wire: Wire): WireStore {
         }
     };
 
-    const scheduleNotify = (): void => {
-        if (notificationQueued) {
+    const scheduleNotify = (generation: number): void => {
+        if (queuedGenerations.has(generation)) {
             return;
         }
 
-        notificationQueued = true;
+        queuedGenerations.add(generation);
 
         queueMicrotask(() => {
-            notificationQueued = false;
-            notify();
+            queuedGenerations.delete(generation);
+
+            if (generation === effectGeneration) {
+                notify();
+            }
         });
     };
 
-    const trackReactiveSelection = (
-        selector?: WireSelector<unknown>,
-    ): (() => void) => {
-        if (!component?.reactive || typeof $wire.$watch !== "function") {
-            return () => {};
+    const releaseEffect = (): void => {
+        effectGeneration += 1;
+
+        if (effectRunner !== null) {
+            store.alpine.release(effectRunner);
+            effectRunner = null;
+        }
+    };
+
+    const startEffect = (): void => {
+        releaseEffect();
+
+        if (listeners.size === 0 || committedPaths.size === 0) {
+            return;
         }
 
-        const properties = new Set<string>();
+        const generation = effectGeneration;
+        const paths = [...committedPaths.values()];
+        let initialized = false;
 
-        if (selector) {
-            const trackingWire = new Proxy($wire, {
-                get(target, property, receiver) {
-                    if (
-                        typeof property === "string"
-                        && !property.startsWith("$")
-                        && property !== "__instance"
-                    ) {
-                        properties.add(property);
-                    }
-
-                    return Reflect.get(target, property, receiver);
-                },
-            });
-
-            selector(trackingWire);
-        } else {
-            for (const property of Object.keys(component.reactive)) {
-                properties.add(property);
+        effectRunner = store.alpine.effect(() => {
+            for (const path of paths) {
+                readReactivePath(store.reactive, path);
             }
+
+            if (!initialized) {
+                initialized = true;
+                return;
+            }
+
+            scheduleNotify(generation);
+        });
+    };
+
+    const recordPath = (path: ReactivePath): void => {
+        if (!collecting || !isReactivePath(store.reactive, path)) {
+            return;
         }
 
-        const stopWatching = [...properties].map((property) => {
-            return $wire.$watch!(property, scheduleNotify);
+        renderPaths.set(JSON.stringify(path), path);
+    };
+
+    const wrap = (target: object, path: ReactivePath): object => {
+        const pathKey = JSON.stringify(path);
+        let targetProxies = proxyCache.get(target);
+
+        if (targetProxies === undefined) {
+            targetProxies = new Map();
+            proxyCache.set(target, targetProxies);
+        }
+
+        const existing = targetProxies.get(pathKey);
+
+        if (existing !== undefined) {
+            return existing;
+        }
+
+        const proxy = new Proxy(target, {
+            deleteProperty(proxyTarget, property) {
+                return Reflect.deleteProperty(proxyTarget, property);
+            },
+            get(proxyTarget, property, receiver) {
+                const value = Reflect.get(proxyTarget, property, receiver);
+
+                if (typeof property !== "string" || shouldIgnoreProperty(property)) {
+                    return value;
+                }
+
+                const nextPath = [...path, property];
+
+                if (typeof value !== "function") {
+                    recordPath(nextPath);
+                }
+
+                return isTrackableObject(value) ? wrap(value, nextPath) : value;
+            },
+            set(proxyTarget, property, value) {
+                return Reflect.set(proxyTarget, property, value);
+            },
         });
 
-        return () => {
-            for (const stopWatch of stopWatching) {
-                stopWatch();
-            }
-        };
+        targetProxies.set(pathKey, proxy);
+
+        return proxy;
     };
+
+    const $wire = wrap(store.$wire, []) as TWire;
 
     return {
         $wire,
-        destroy() {
-            for (const stopWatching of watchCleanups) {
-                stopWatching();
+        beginRender() {
+            renderPaths = new Map();
+            collecting = true;
+        },
+        commitRender() {
+            collecting = false;
+
+            if (samePaths(renderPaths, committedPaths)) {
+                return;
             }
 
-            watchCleanups.clear();
-            listeners.clear();
+            committedPaths = renderPaths;
+            startEffect();
         },
-        getVersion() {
+        getSnapshot() {
             return version;
         },
-        subscribe(listener, selector) {
+        subscribe(listener) {
             listeners.add(listener);
-            const stopTracking = trackReactiveSelection(selector);
-            watchCleanups.add(stopTracking);
+
+            if (listeners.size === 1) {
+                startEffect();
+            }
 
             return () => {
-                if (!watchCleanups.delete(stopTracking)) {
-                    return;
-                }
-
-                stopTracking();
                 listeners.delete(listener);
+
+                if (listeners.size === 0) {
+                    releaseEffect();
+                }
             };
         },
     };
+}
+
+function readReactivePath(
+    reactive: Record<string, unknown>,
+    path: ReactivePath,
+): unknown {
+    let value: unknown = reactive;
+
+    for (const property of path) {
+        if (value === null || typeof value !== "object") {
+            return undefined;
+        }
+
+        value = Reflect.get(value, property);
+    }
+
+    return value;
+}
+
+function isReactivePath(
+    reactive: Record<string, unknown>,
+    path: ReactivePath,
+): boolean {
+    const rootProperty = path[0];
+
+    return rootProperty !== undefined
+        && !shouldIgnoreProperty(rootProperty)
+        && Object.prototype.hasOwnProperty.call(reactive, rootProperty);
+}
+
+function shouldIgnoreProperty(property: string): boolean {
+    return property === "__instance" || property === "then" || property.startsWith("$");
+}
+
+function isTrackableObject(value: unknown): value is object {
+    if (value === null || typeof value !== "object") {
+        return false;
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+
+    return Array.isArray(value)
+        || prototype === Object.prototype
+        || prototype === null;
+}
+
+function samePaths(
+    left: Map<string, ReactivePath>,
+    right: Map<string, ReactivePath>,
+): boolean {
+    if (left.size !== right.size) {
+        return false;
+    }
+
+    for (const path of left.keys()) {
+        if (!right.has(path)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 export type WireProviderProps = {
@@ -142,54 +297,36 @@ export function WireProvider({ $wire, children }: WireProviderProps): ReactEleme
     const storeRef = useRef<WireStore | null>(null);
 
     if (storeRef.current === null || storeRef.current.$wire !== $wire) {
-        storeRef.current?.destroy();
         storeRef.current = createWireStore($wire);
     }
 
-    const store = storeRef.current;
-
-    useEffect(() => () => store.destroy(), [store]);
-
-    return createElement(WireContext.Provider, { value: store }, children);
+    return createElement(WireContext.Provider, {
+        value: storeRef.current,
+    }, children);
 }
 
-export function useWire<TWire extends Wire = Wire>(): TWire;
-export function useWire<TSelected, TWire extends Wire = Wire>(
-    selector: WireSelector<TSelected, TWire>,
-): TSelected;
-export function useWire<TSelected, TWire extends Wire = Wire>(
-    selector?: WireSelector<TSelected, TWire>,
-): TWire | TSelected {
+export function useWire<TWire extends Wire = Wire>(): TWire {
     const store = useContext(WireContext);
 
     if (store === null) {
         throw new Error("useWire must be used inside a Livewire React component");
     }
 
-    const subscribe = useCallback(
-        (listener: () => void) => store.subscribe(
-            listener,
-            selector as WireSelector<unknown> | undefined,
-        ),
-        [store, selector],
+    const subscription = useMemo(() => {
+        return createTrackedSubscription<TWire>(store);
+    }, [store]);
+
+    subscription.beginRender();
+
+    useSyncExternalStore(
+        subscription.subscribe,
+        subscription.getSnapshot,
+        subscription.getSnapshot,
     );
-    const getSnapshot = useCallback(
-        () => selector
-            ? selector(store.$wire as TWire)
-            : store.getVersion(),
-        [store, selector],
-    );
-    const selected = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-    return selector ? selected as TSelected : store.$wire as TWire;
-}
+    useLayoutEffect(() => {
+        subscription.commitRender();
+    });
 
-export function useWireProxy<TWire extends Wire = Wire>(): TWire {
-    const store = useContext(WireContext);
-
-    if (store === null) {
-        throw new Error("useWireProxy must be used inside a Livewire React component");
-    }
-
-    return store.$wire as TWire;
+    return subscription.$wire as TWire;
 }

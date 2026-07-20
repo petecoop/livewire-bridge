@@ -89,13 +89,12 @@ component's `$wire` and `$js` values.
 <div wire:ref="app" wire:ignore></div>
 
 <script lang="tsx" data-react="app">
-    import { useWire, useWireProxy } from "@petecoop/livewire-vite-react";
+    import { useWire } from "@petecoop/livewire-vite-react";
 
     export default function Counter() {
-        const count = useWire(($wire) => $wire.count);
-        const $wire = useWireProxy();
+        const $wire = useWire();
 
-        return <button onClick={() => $wire.count++}>{count}</button>;
+        return <button onClick={() => $wire.count++}>{$wire.count}</button>;
     }
 </script>
 ```
@@ -106,17 +105,15 @@ state survives React Fast Refresh without reloading the Livewire component.
 
 ### Wire hooks
 
-- `useWire()` returns the full `$wire` proxy and subscribes to every existing
-  public property.
-- `useWire(selector)` watches only the top-level properties read by the
-  selector. Livewire's deep watch behavior covers nested changes, and React
-  compares selected snapshots with `Object.is`.
-- `useWireProxy()` returns the instance-scoped proxy without subscribing. Use
-  it for property writes, `$set`, and Livewire action calls alongside a narrow
-  selector.
+- `useWire()` returns a writable `$wire` proxy and tracks the reactive paths
+  read during the committed React render. Only changes to those paths notify
+  that hook subscription.
+- Property writes, `$set`, and Livewire action calls continue to pass through
+  the same `$wire` proxy. A `useWire()` call used only inside an event handler
+  records no render dependencies.
 
-Selector consumers update for Alpine mutations, React proxy writes, and server
-responses because subscriptions use Livewire's Alpine-reactive `$watch` API.
+The hook updates for Alpine mutations, React proxy writes, and server responses
+without creating `$watch` subscriptions.
 
 ## Development
 
