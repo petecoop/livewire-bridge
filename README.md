@@ -1,6 +1,6 @@
 # livewire-bridge
 
-Vite-powered client components and scripts for Livewire.
+`import` inside Livewire scripts. Provides a react wrapper and `useWire()` hook for Livewire state.
 
 ## Installation
 
@@ -21,9 +21,7 @@ npm install --save-dev @vitejs/plugin-react
 
 ```js
 import laravel, { refreshPaths } from "laravel-vite-plugin";
-import livewireBridge, {
-  exceptLivewire,
-} from "@petecoop/livewire-bridge";
+import livewireBridge, { exceptLivewire } from "@petecoop/livewire-bridge";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
