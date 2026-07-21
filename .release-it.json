@@ -1,0 +1,16 @@
+{
+  "git": {
+    "requireBranch": "main",
+    "requireCleanWorkingDir": true,
+    "commitMessage": "Release v${version}",
+    "tagName": "v${version}",
+    "push": true
+  },
+  "npm": {
+    "publish": true
+  },
+  "hooks": {
+    "before:init": "npm run test:js",
+    "after:bump": "npm run build"
+  }
+}

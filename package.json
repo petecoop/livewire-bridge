@@ -25,6 +25,8 @@
     "scripts": {
         "build": "tsdown",
         "dev": "tsdown --watch",
+        "release": "release-it",
+        "release:dry-run": "release-it --dry-run",
         "test": "npm run test:js && npm run test:php",
         "test:js": "npm run typecheck && vitest run",
         "test:js:watch": "vitest",
@@ -47,6 +49,7 @@
         "playwright": "^1.61.1",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
+        "release-it": "^20.2.1",
         "tsdown": "latest",
         "typescript": "^6.0.3",
         "vite": "^8.0.0",

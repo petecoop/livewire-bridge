@@ -21,7 +21,9 @@ php artisan vendor:publish --tag=livewire-vite-react-config
 
 ```js
 import laravel, { refreshPaths } from "laravel-vite-plugin";
-import livewireViteReact, { livewirePaths } from "@petecoop/livewire-vite-react/vite";
+import livewireViteReact, {
+  livewirePaths,
+} from "@petecoop/livewire-vite-react/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -33,7 +35,10 @@ export default defineConfig({
         const refreshRoot = refreshPath.replace(/\/\*\*$/, "");
 
         return !livewirePaths.some((livewirePath) => {
-          return livewirePath === refreshRoot || livewirePath.startsWith(`${refreshRoot}/`);
+          return (
+            livewirePath === refreshRoot ||
+            livewirePath.startsWith(`${refreshRoot}/`)
+          );
         });
       }),
     }),
