@@ -57,3 +57,16 @@ it('mounts an explicitly named React multi-file component', function () {
         ->assertSeeIn('@mfc-react-counter', 'React: 2')
         ->assertNoJavaScriptErrors();
 })->group('browser');
+
+it('mounts React from a class component script block', function () {
+    $page = visit('/class')
+        ->assertSeeIn('@class-livewire-counter', 'Livewire: 0')
+        ->assertSeeIn('@class-react-counter', 'React: 0');
+
+    $page->click('@class-react-counter')
+        ->assertSeeIn('@class-react-counter', 'React: 1')
+        ->click('@class-livewire-counter')
+        ->assertSeeIn('@class-livewire-counter', 'Livewire: 2')
+        ->assertSeeIn('@class-react-counter', 'React: 2')
+        ->assertNoJavaScriptErrors();
+})->group('browser');

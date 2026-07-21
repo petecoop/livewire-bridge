@@ -5,6 +5,7 @@ namespace LivewireBridge;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\View\Compilers\BladeCompiler;
 use Livewire\Compiler\Compiler;
 use Livewire\Livewire;
 use LivewireBridge\Compiler\BridgeCompiler;
@@ -34,6 +35,16 @@ class LivewireBridgeServiceProvider extends ServiceProvider
             fn (string $contents, string $path): string => $this->replaceBridgeScripts($contents, $path),
         );
 
+        /** @var BladeCompiler $blade */
+        $blade = app('blade.compiler');
+        $blade->prepareStringsForCompilationUsing(function (string $contents) use ($blade): string {
+            $path = $blade->getPath();
+
+            return is_string($path) && is_file($path)
+                ? $this->replaceBridgeScripts($contents, $path)
+                : $contents;
+        });
+
         Route::get(app('livewire')->getUriPrefix().'/bridge/{source}.js', function (string $source) {
             $path = $this->decodeSource($source);
 
@@ -61,14 +72,35 @@ class LivewireBridgeServiceProvider extends ServiceProvider
         $moduleUrl = route('livewire-bridge.module', ['source' => $source], false);
         $specifier = json_encode($moduleUrl, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
-        return preg_replace(
-            '/<script\b(?=[^>]*(?:\sbridge(?:\s|=|>)|\sbridge:react\s*=))[^>]*>.*?<\/script>/s',
-            <<<HTML
+        $contents = preg_replace_callback(
+            '/@script\b.*?@endscript/s',
+            fn (array $matches): string => $this->replaceBridgeScriptTag($matches[0], $specifier, dynamic: true),
+            $contents,
+        ) ?? $contents;
+
+        return $this->replaceBridgeScriptTag($contents, $specifier);
+    }
+
+    private function replaceBridgeScriptTag(string $contents, string $specifier, bool $dynamic = false): string
+    {
+        $replacement = $dynamic
+            ? <<<HTML
+            <script>
+                import({$specifier}).then(({ run: runBridgeModule }) => {
+                    runBridgeModule.call(this, \$wire, \$js);
+                });
+            </script>
+            HTML
+            : <<<HTML
             <script>
                 import { run as runBridgeModule } from {$specifier};
                 runBridgeModule.call(this, \$wire, \$js);
             </script>
-            HTML,
+            HTML;
+
+        return preg_replace(
+            '/<script\b(?=[^>]*(?:\sbridge(?:\s|=|>)|\sbridge:react\s*=))[^>]*>.*?<\/script>/s',
+            $replacement,
             $contents,
             1,
         ) ?? $contents;

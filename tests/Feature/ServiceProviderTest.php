@@ -78,6 +78,31 @@ it('compiles marked scripts into the Livewire module bridge', function () {
         ->assertDontSee('bridge:react=', escape: false);
 });
 
+it('compiles bridge scripts in class component Blade views', function () {
+    $path = resource_path('views/livewire/class-counter.blade.php');
+    $filesystem = new Filesystem;
+    $filesystem->ensureDirectoryExists(dirname($path));
+    $filesystem->put($path, <<<'BLADE'
+    <div wire:ref="widget"></div>
+
+    @script
+    <script bridge:react="widget">
+        export default function Counter() { return null; }
+    </script>
+    @endscript
+    BLADE);
+
+    $compiler = app('blade.compiler');
+    $compiler->setPath($path);
+    $compiled = $compiler->compileString($filesystem->get($path));
+
+    expect($compiled)
+        ->toContain('/bridge/'.rtrim(strtr(base64_encode('resources/views/livewire/class-counter.blade.php'), '+/', '-_'), '=').'.js')
+        ->toContain('import("/livewire-')
+        ->not->toContain('import { run as runBridgeModule }')
+        ->not->toContain('bridge:react="widget"');
+});
+
 it('serves a production wrapper for a built fixture module', function () {
     $response = $this->get(app('livewire')->getUriPrefix().'/bridge/'.fixtureSource().'.js');
 
