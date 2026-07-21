@@ -1,2 +1,7 @@
 /dist
 /node_modules
+todo.md
+/tests/Browser/Screenshots
+/vendor
+/workbench/public/build
+composer.lock

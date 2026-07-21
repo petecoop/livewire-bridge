@@ -8,7 +8,12 @@
 /.gitignore
 /.github/
 /tests/
+/workbench/
+/composer.lock
+/phpunit.xml
+/testbench.yaml
 /package-lock.json
+/tsconfig.test.json
 /tsconfig.json
 /tsdown.config.ts
-
+/vitest.config.ts

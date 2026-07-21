@@ -1,0 +1,16 @@
+laravel: '@testbench'
+
+providers:
+  - LivewireViteReact\LivewireViteReactServiceProvider
+
+workbench:
+  start: '/'
+  install: true
+  health: false
+  discovers:
+    web: true
+    api: false
+    commands: false
+    components: false
+    factories: false
+    views: false

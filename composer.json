@@ -14,6 +14,42 @@
             "LivewireViteReact\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0|^10.0|^11.0",
+        "pestphp/pest": "^4.7",
+        "pestphp/pest-plugin-browser": "^4.3",
+        "pestphp/pest-plugin-laravel": "^4.1"
+    },
+    "archive": {
+        "exclude": [
+            "/.gitattributes",
+            "/.gitignore",
+            "/.github",
+            "/.npmignore",
+            "/tests",
+            "/workbench",
+            "/composer.lock",
+            "/dist",
+            "/node_modules",
+            "/package-lock.json",
+            "/package.json",
+            "/phpunit.xml",
+            "/src/*.ts",
+            "/src/entries",
+            "/testbench.yaml",
+            "/todo.md",
+            "/tsconfig.test.json",
+            "/tsconfig.json",
+            "/tsdown.config.ts",
+            "/vendor",
+            "/vitest.config.ts"
+        ]
+    },
     "extra": {
         "laravel": {
             "providers": [
@@ -21,6 +57,26 @@
             ]
         }
     },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "scripts": {
+        "post-autoload-dump": [
+            "@clear",
+            "@prepare"
+        ],
+        "clear": "@php vendor/bin/testbench package:purge-skeleton --ansi",
+        "prepare": "@php vendor/bin/testbench package:discover --ansi",
+        "build": "@php vendor/bin/testbench workbench:build --ansi",
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "@build",
+            "@php vendor/bin/testbench serve --ansi"
+        ]
+    }
 }

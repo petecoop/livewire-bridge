@@ -25,6 +25,13 @@
     "scripts": {
         "build": "tsdown",
         "dev": "tsdown --watch",
+        "test": "npm run test:js && npm run test:php",
+        "test:js": "npm run typecheck && vitest run",
+        "test:js:watch": "vitest",
+        "test:fixture:build": "npm run build && vite build --config tests/Fixtures/vite.config.ts",
+        "test:php": "npm run test:fixture:build && vendor/bin/pest --exclude-group=browser",
+        "test:browser": "npm run test:fixture:build && vendor/bin/pest --group=browser",
+        "typecheck": "tsc --noEmit -p tsconfig.test.json",
         "prepublishOnly": "npm run build"
     },
     "peerDependencies": {
@@ -33,12 +40,16 @@
         "vite": ">=6.0.0"
     },
     "devDependencies": {
+        "@testing-library/react": "^16.3.2",
         "@types/node": "^26.1.1",
         "@types/react": "^19.0.0",
+        "jsdom": "^29.1.1",
+        "playwright": "^1.61.1",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
         "tsdown": "latest",
         "typescript": "^6.0.3",
-        "vite": "^8.0.0"
+        "vite": "^8.0.0",
+        "vitest": "^4.1.10"
     }
 }
