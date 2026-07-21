@@ -9,8 +9,9 @@ composer require petecoop/livewire-vite-react
 npm install @petecoop/livewire-vite-react
 ```
 
-Laravel discovers the service provider automatically. Publish its configuration
-when the application uses non-default paths:
+Laravel discovers the service provider automatically. No PHP configuration is
+needed when the application uses Livewire's component locations and namespaces.
+Publish the configuration only to scan a different set of paths:
 
 ```bash
 php artisan vendor:publish --tag=livewire-vite-react-config
@@ -20,40 +21,56 @@ php artisan vendor:publish --tag=livewire-vite-react-config
 
 ```js
 import laravel, { refreshPaths } from "laravel-vite-plugin";
-import livewireViteReact from "@petecoop/livewire-vite-react/vite";
+import livewireViteReact, { livewirePaths } from "@petecoop/livewire-vite-react/vite";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-
-const livewireScripts = {
-  sourceDirectories: ["resources/views"],
-  sourceExtensions: [".blade.php"],
-  entryPrefix: "/@livewire-vite/",
-  reactComponentPrefix: "/@livewire-vite-react-component/",
-  reactModule: "@petecoop/livewire-vite-react",
-  manifestFile: "livewire-manifest.json",
-};
 
 export default defineConfig({
   plugins: [
     laravel({
       input: ["resources/css/app.css", "resources/js/app.js"],
       refresh: refreshPaths.filter((refreshPath) => {
-        return !livewireScripts.sourceDirectories.some((directory) => {
-          return refreshPath === `${directory}/**`;
+        const refreshRoot = refreshPath.replace(/\/\*\*$/, "");
+
+        return !livewirePaths.some((livewirePath) => {
+          return livewirePath === refreshRoot || livewirePath.startsWith(`${refreshRoot}/`);
         });
       }),
     }),
-    livewireViteReact(livewireScripts),
+    react(),
+    livewireViteReact(),
   ],
 });
 ```
 
-The Laravel and Vite configuration must agree on `sourceDirectories`,
-`entryPrefix`, the build directory, and the manifest filename.
+The exported `livewirePaths` array contains the same paths that the plugin scans
+by default, matching an unmodified Livewire 4 application:
 
-The example removes the component source directories from Laravel's normal
-full-page refresh watcher. The Livewire plugin then owns changes in those views:
-React-script-only edits use Fast Refresh, while markup and general script edits
-still trigger a full reload.
+- `resources/views/components`
+- `resources/views/livewire`
+- `resources/views/layouts`
+- `resources/views/pages`
+
+Use the single `paths` option when the application has different component
+locations:
+
+```js
+livewireViteReact({ paths: ["resources/views/components"] });
+```
+
+Publish `config/livewire-vite-react.php` and set the corresponding absolute PHP
+paths when they differ from Livewire's configured component locations and
+namespaces.
+
+If Laravel's Vite plugin also watches these files through its `refresh` option,
+filter its exported `refreshPaths` as shown above. The Livewire plugin then owns
+changes in its configured paths: React-script-only edits use Fast Refresh, while
+markup and general script edits still trigger a full reload.
+
+The package uses Laravel's standard Vite build directory and manifest. Its
+component-module endpoint follows Livewire 4's hash-based endpoint prefix, so
+there is no route, entry-prefix, build-directory, or manifest option to keep in
+sync.
 
 ## General Vite scripts
 

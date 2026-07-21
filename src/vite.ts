@@ -6,17 +6,24 @@ import { createReactEntryModule } from "./entries/react";
 
 const entrySuffix = ".livewire-entry.tsx";
 const componentSuffix = ".livewire-component.tsx";
+const entryPrefix = "/@livewire-vite/";
+const reactComponentPrefix = "/@livewire-vite-react-component/";
+const reactModule = "@petecoop/livewire-vite-react";
+
+export const livewirePaths = [
+    "resources/views/components",
+    "resources/views/livewire",
+    "resources/views/layouts",
+    "resources/views/pages",
+];
 
 export type LivewireViteReactOptions = {
-    sourceDirectories: string[];
-    sourceExtensions?: string[];
-    entryPrefix?: string;
-    reactComponentPrefix?: string;
-    reactModule?: string;
-    manifestFile?: string;
+    paths?: string[];
 };
 
-type ResolvedOptions = Required<LivewireViteReactOptions>;
+type ResolvedOptions = {
+    paths: string[];
+};
 
 type BaseScriptDefinition = {
     code: string;
@@ -39,30 +46,40 @@ type ReactScriptDefinition = BaseScriptDefinition & {
 type ScriptDefinition = ViteScriptDefinition | ReactScriptDefinition;
 type RollupInput = string | string[] | Record<string, string> | undefined;
 
-export default function livewireViteReact(
-    pluginOptions: LivewireViteReactOptions,
-): Plugin {
+export default function livewireViteReact(pluginOptions: LivewireViteReactOptions = {}): Plugin {
     const options = resolveOptions(pluginOptions);
     let projectRoot = "";
     let command: ResolvedConfig["command"] = "serve";
-    let sourceDirectories: string[] = [];
+    let paths: string[] = [];
     const sourceCache = new Map<string, string>();
 
     return {
         name: "livewire-vite-react",
         enforce: "pre",
 
+        config(config) {
+            return {
+                resolve: {
+                    dedupe: [...new Set([
+                        ...(config.resolve?.dedupe ?? []),
+                        "react",
+                        "react-dom",
+                    ])],
+                },
+            };
+        },
+
         configResolved(config) {
             projectRoot = config.root;
             command = config.command;
-            sourceDirectories = options.sourceDirectories.map((directory) => {
-                return path.resolve(projectRoot, directory);
+            paths = options.paths.map((configuredPath) => {
+                return path.resolve(projectRoot, configuredPath);
             });
         },
 
         configureServer(server) {
-            for (const directory of sourceDirectories) {
-                server.watcher.add(directory);
+            for (const configuredPath of paths) {
+                server.watcher.add(configuredPath);
             }
         },
 
@@ -71,20 +88,15 @@ export default function livewireViteReact(
                 return null;
             }
 
-            const entries = discoverScripts(sourceDirectories, options.sourceExtensions)
-                .map((file) => {
-                    const relativePath = normalizePath(path.relative(projectRoot, file));
+            const entries = discoverScripts(paths).map((file) => {
+                const relativePath = normalizePath(path.relative(projectRoot, file));
 
-                    return `${options.entryPrefix}${encodeSource(relativePath)}`;
-                });
+                return `${entryPrefix}${encodeSource(relativePath)}`;
+            });
 
             return {
                 ...rollupOptions,
-                input: appendInputs(
-                    rollupOptions.input as RollupInput,
-                    entries,
-                    options.entryPrefix,
-                ),
+                input: appendInputs(rollupOptions.input as RollupInput, entries),
                 preserveEntrySignatures: "exports-only",
             };
         },
@@ -94,16 +106,14 @@ export default function livewireViteReact(
                 return id;
             }
 
-            if (id.startsWith(options.entryPrefix)) {
-                const relativePath = decodeSource(id.slice(options.entryPrefix.length));
+            if (id.startsWith(entryPrefix)) {
+                const relativePath = decodeSource(id.slice(entryPrefix.length));
 
                 return `${path.resolve(projectRoot, relativePath)}${entrySuffix}`;
             }
 
-            if (id.startsWith(options.reactComponentPrefix)) {
-                const relativePath = decodeSource(
-                    id.slice(options.reactComponentPrefix.length),
-                );
+            if (id.startsWith(reactComponentPrefix)) {
+                const relativePath = decodeSource(id.slice(reactComponentPrefix.length));
 
                 return `${path.resolve(projectRoot, relativePath)}${componentSuffix}`;
             }
@@ -123,9 +133,9 @@ export default function livewireViteReact(
             const absolutePath = id.slice(0, -suffix.length);
             const relativePath = normalizePath(path.relative(projectRoot, absolutePath));
 
-            if (!isInsideSourceDirectory(absolutePath, sourceDirectories)) {
+            if (!isInsideConfiguredPath(absolutePath, paths)) {
                 throw new Error(
-                    `Refusing to load a Livewire script outside the configured source directories: ${relativePath}`,
+                    `Refusing to load a Livewire script outside the configured paths: ${relativePath}`,
                 );
             }
 
@@ -169,8 +179,8 @@ export default function livewireViteReact(
 
             return {
                 code: createReactEntryModule({
-                    reactComponentPrefix: options.reactComponentPrefix,
-                    reactModule: options.reactModule,
+                    reactComponentPrefix,
+                    reactModule,
                     ref: definition.ref,
                     source: encodeSource(relativePath),
                 }),
@@ -181,23 +191,23 @@ export default function livewireViteReact(
         async handleHotUpdate(context) {
             const absolutePath = path.resolve(context.file);
 
-            if (!isInsideSourceDirectory(absolutePath, sourceDirectories)) {
+            if (!isInsideConfiguredPath(absolutePath, paths)) {
                 return;
             }
 
             const previousSource = sourceCache.get(absolutePath);
             const nextSource = await context.read();
-            const previousDefinition = previousSource === undefined
-                ? null
-                : extractScriptDefinition(previousSource);
+            const previousDefinition =
+                previousSource === undefined ? null : extractScriptDefinition(previousSource);
             const nextDefinition = extractScriptDefinition(nextSource);
-            const scriptOnlyChange = previousSource !== undefined
-                && previousDefinition !== null
-                && nextDefinition !== null
-                && previousDefinition.type === nextDefinition.type
-                && previousDefinition.ref === nextDefinition.ref
-                && withoutScriptContents(previousSource, previousDefinition)
-                    === withoutScriptContents(nextSource, nextDefinition);
+            const scriptOnlyChange =
+                previousSource !== undefined &&
+                previousDefinition !== null &&
+                nextDefinition !== null &&
+                previousDefinition.type === nextDefinition.type &&
+                previousDefinition.ref === nextDefinition.ref &&
+                withoutScriptContents(previousSource, previousDefinition) ===
+                    withoutScriptContents(nextSource, nextDefinition);
 
             sourceCache.set(absolutePath, nextSource);
 
@@ -212,76 +222,36 @@ export default function livewireViteReact(
 
             return module ? [module] : [];
         },
-
-        generateBundle(_outputOptions, bundle) {
-            const manifest: Record<string, { file: string; source: string }> = {};
-
-            for (const chunk of Object.values(bundle)) {
-                if (
-                    chunk.type !== "chunk"
-                    || !chunk.isEntry
-                    || !chunk.facadeModuleId?.endsWith(entrySuffix)
-                ) {
-                    continue;
-                }
-
-                const absolutePath = chunk.facadeModuleId.slice(0, -entrySuffix.length);
-                const relativePath = normalizePath(path.relative(projectRoot, absolutePath));
-                const source = encodeSource(relativePath);
-
-                manifest[source] = {
-                    file: chunk.fileName,
-                    source: relativePath,
-                };
-            }
-
-            this.emitFile({
-                type: "asset",
-                fileName: options.manifestFile,
-                source: `${JSON.stringify(manifest, null, 2)}\n`,
-            });
-        },
     };
 }
 
 function resolveOptions(options: LivewireViteReactOptions): ResolvedOptions {
-    if (!Array.isArray(options?.sourceDirectories) || options.sourceDirectories.length === 0) {
-        throw new Error("livewireViteReact requires a non-empty sourceDirectories option");
+    if (
+        options.paths !== undefined &&
+        (!Array.isArray(options.paths) || options.paths.length === 0)
+    ) {
+        throw new Error("livewireViteReact paths must be a non-empty array");
     }
 
     return {
-        sourceDirectories: options.sourceDirectories,
-        sourceExtensions: options.sourceExtensions ?? [".blade.php"],
-        entryPrefix: normalizePrefix(options.entryPrefix ?? "/@livewire-vite/"),
-        reactComponentPrefix: normalizePrefix(
-            options.reactComponentPrefix ?? "/@livewire-vite-react-component/",
-        ),
-        reactModule: options.reactModule ?? "@petecoop/livewire-vite-react",
-        manifestFile: options.manifestFile ?? "livewire-manifest.json",
+        paths: options.paths ?? livewirePaths,
     };
 }
 
-function normalizePrefix(prefix: string): string {
-    return `/${prefix.replace(/^\/+|\/+$/g, "")}/`;
-}
-
-function discoverScripts(
-    sourceDirectories: string[],
-    sourceExtensions: string[],
-): string[] {
+function discoverScripts(paths: string[]): string[] {
     const files: string[] = [];
 
-    for (const directory of sourceDirectories) {
-        if (fs.existsSync(directory)) {
-            visitDirectory(directory, files);
+    for (const configuredPath of paths) {
+        if (fs.existsSync(configuredPath)) {
+            visitDirectory(configuredPath, files);
         }
     }
 
     return [...new Set(files)].filter((file) => {
-        return sourceExtensions.some((extension) => file.endsWith(extension))
-            && /<script\b[^>]*(?:\bdata-vite\b|\bdata-react\b)/.test(
-                fs.readFileSync(file, "utf8"),
-            );
+        return (
+            file.endsWith(".blade.php") &&
+            /<script\b[^>]*(?:\bdata-vite\b|\bdata-react\b)/.test(fs.readFileSync(file, "utf8"))
+        );
     });
 }
 
@@ -297,17 +267,13 @@ function visitDirectory(directory: string, files: string[]): void {
     }
 }
 
-function isInsideSourceDirectory(file: string, sourceDirectories: string[]): boolean {
-    return sourceDirectories.some((directory) => {
-        return file === directory || file.startsWith(`${directory}${path.sep}`);
+function isInsideConfiguredPath(file: string, paths: string[]): boolean {
+    return paths.some((configuredPath) => {
+        return file === configuredPath || file.startsWith(`${configuredPath}${path.sep}`);
     });
 }
 
-function appendInputs(
-    input: RollupInput,
-    entries: string[],
-    entryPrefix: string,
-): RollupInput {
+function appendInputs(input: RollupInput, entries: string[]): RollupInput {
     if (Array.isArray(input)) {
         return [...input, ...entries];
     }
@@ -355,9 +321,7 @@ function extractScriptDefinition(
         }
 
         if (hasVite && hasReact) {
-            throw new Error(
-                `A script cannot use both data-vite and data-react in ${relativePath}`,
-            );
+            throw new Error(`A script cannot use both data-vite and data-react in ${relativePath}`);
         }
 
         const openTagLength = match[0].indexOf(">");
@@ -409,12 +373,10 @@ function assertReactTarget(
     }
 }
 
-function assertReactComponentExport(
-    definition: ReactScriptDefinition,
-    relativePath: string,
-): void {
-    const hasDefaultExport = /\bexport\s+default\b/.test(definition.code)
-        || /\bexport\s*{[^}]*\bas\s+default\b[^}]*}/s.test(definition.code);
+function assertReactComponentExport(definition: ReactScriptDefinition, relativePath: string): void {
+    const hasDefaultExport =
+        /\bexport\s+default\b/.test(definition.code) ||
+        /\bexport\s*{[^}]*\bas\s+default\b[^}]*}/s.test(definition.code);
 
     if (!hasDefaultExport) {
         throw new Error(

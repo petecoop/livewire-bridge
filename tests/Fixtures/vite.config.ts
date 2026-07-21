@@ -9,13 +9,10 @@ const packageDirectory = path.resolve(fixtureDirectory, "../..");
 export default defineConfig({
     publicDir: false,
     root: path.join(packageDirectory, "workbench"),
-    plugins: [
-        livewireViteReact({
-            sourceDirectories: ["resources/views"],
-        }),
-    ],
+    plugins: [livewireViteReact()],
     build: {
         emptyOutDir: true,
+        manifest: "manifest.json",
         minify: false,
         outDir: "public/build",
         rollupOptions: {

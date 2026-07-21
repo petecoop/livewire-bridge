@@ -9,6 +9,10 @@ use Livewire\Livewire;
 
 class LivewireViteReactServiceProvider extends ServiceProvider
 {
+    private const ENTRY_PREFIX = '/@livewire-vite/';
+
+    private const ENTRY_SUFFIX = '.livewire-entry.tsx';
+
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/livewire-vite-react.php', 'livewire-vite-react');
@@ -24,14 +28,14 @@ class LivewireViteReactServiceProvider extends ServiceProvider
             fn (string $contents, string $path): string => $this->replaceViteScripts($contents, $path),
         );
 
-        Route::get($this->routePath().'/{source}.js', function (string $source) {
+        Route::get(app('livewire')->getUriPrefix().'/vite/{source}.js', function (string $source) {
             $path = $this->decodeSource($source);
 
             abort_unless($path !== null && $this->isSourcePath($path), 404);
 
             $url = Vite::isRunningHot()
-                ? Vite::asset($this->entryPrefix().$source)
-                : $this->builtModuleUrl($source);
+                ? Vite::asset(self::ENTRY_PREFIX.$source)
+                : Vite::asset($path.self::ENTRY_SUFFIX);
             $specifier = json_encode($url, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
             return response("export { run } from {$specifier};\n")
@@ -64,35 +68,6 @@ class LivewireViteReactServiceProvider extends ServiceProvider
         ) ?? $contents;
     }
 
-    private function builtModuleUrl(string $source): string
-    {
-        $buildDirectory = trim((string) config('livewire-vite-react.build_directory'), '/');
-        $manifestPath = public_path($buildDirectory.'/'.config('livewire-vite-react.manifest'));
-
-        abort_unless(file_exists($manifestPath), 503, 'The Livewire Vite manifest is missing. Run the Vite build first.');
-
-        $manifest = json_decode(file_get_contents($manifestPath), true, flags: JSON_THROW_ON_ERROR);
-        $entry = $manifest[$source] ?? null;
-
-        abort_unless(is_array($entry) && isset($entry['file']), 404, 'The Livewire component script was not found in the Vite build.');
-
-        $file = ltrim($entry['file'], '/');
-
-        abort_unless(file_exists(public_path($buildDirectory.'/'.$file)), 503, 'The built Livewire component script is missing.');
-
-        return asset($buildDirectory.'/'.$file);
-    }
-
-    private function routePath(): string
-    {
-        return '/'.trim((string) config('livewire-vite-react.route_prefix'), '/');
-    }
-
-    private function entryPrefix(): string
-    {
-        return trim((string) config('livewire-vite-react.entry_prefix'), '/').'/';
-    }
-
     private function encodeSource(string $path): string
     {
         return rtrim(strtr(base64_encode($path), '+/', '-_'), '=');
@@ -113,8 +88,8 @@ class LivewireViteReactServiceProvider extends ServiceProvider
             return false;
         }
 
-        foreach ((array) config('livewire-vite-react.source_directories', []) as $directory) {
-            $sourcePath = realpath(base_path($directory));
+        foreach ($this->sourcePaths() as $directory) {
+            $sourcePath = realpath($this->absolutePath($directory));
 
             if ($sourcePath !== false && str_starts_with($absolutePath, $sourcePath.DIRECTORY_SEPARATOR)) {
                 return true;
@@ -122,5 +97,28 @@ class LivewireViteReactServiceProvider extends ServiceProvider
         }
 
         return false;
+    }
+
+    /** @return array<int, string> */
+    private function sourcePaths(): array
+    {
+        $paths = config('livewire-vite-react.paths');
+
+        if (is_array($paths)) {
+            return array_values(array_unique($paths));
+        }
+
+        return array_values(array_unique([
+            ...(array) config('livewire.component_locations', []),
+            ...array_values((array) config('livewire.component_namespaces', [])),
+        ]));
+    }
+
+    private function absolutePath(string $path): string
+    {
+        $isAbsolute = str_starts_with($path, DIRECTORY_SEPARATOR)
+            || preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1;
+
+        return $isAbsolute ? $path : base_path($path);
     }
 }
