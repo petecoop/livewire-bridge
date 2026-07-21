@@ -18,7 +18,7 @@ it('compiles marked scripts into the Livewire module bridge', function () {
     $this->get('/')
         ->assertOk()
         ->assertSee('scriptModule', escape: false)
-        ->assertDontSee('data-react=', escape: false);
+        ->assertDontSee('bridge:react=', escape: false);
 });
 
 it('serves a production wrapper for a built fixture module', function () {

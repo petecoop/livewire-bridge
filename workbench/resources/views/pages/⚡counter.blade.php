@@ -30,7 +30,7 @@ new class extends Component {
     <div wire:ref="app" wire:ignore data-testid="react-root"></div>
 </main>
 
-<script lang="tsx" data-react="app">
+<script lang="tsx" bridge:react="app">
     import { useRef } from "react";
     import { useWire } from "@petecoop/livewire-bridge/react";
 

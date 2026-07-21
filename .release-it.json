@@ -10,7 +10,7 @@
     "publish": true
   },
   "hooks": {
-    "before:init": "npm run test:js",
+    "before:init": "npm test",
     "after:bump": "npm run build"
   }
 }

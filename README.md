@@ -9,6 +9,14 @@ composer require petecoop/livewire-bridge
 npm install @petecoop/livewire-bridge
 ```
 
+React support is optional. Install its runtime and Vite plugin when using
+`bridge:react`:
+
+```bash
+npm install react react-dom
+npm install --save-dev @vitejs/plugin-react
+```
+
 ## Vite configuration
 
 ```js
@@ -54,10 +62,10 @@ namespaces.
 
 ## Importing in script blocks
 
-Use `data-vite` to mark a `<script>` block for Vite processing. `$wire` and `$js` are available in the script:
+Use `bridge` to mark a `<script>` block for Vite processing. `$wire` and `$js` are available in the script:
 
 ```blade
-<script lang="ts" data-vite>
+<script lang="ts" bridge>
     import { format } from "some-package";
 
     $js("formattedCount", () => format($wire.count));
@@ -66,12 +74,12 @@ Use `data-vite` to mark a `<script>` block for Vite processing. `$wire` and `$js
 
 ## React
 
-Use `data-react` to mark a `<script>` block for Vite processing and React component export. Use a `wire:ref` target to mount the component. The `useWire()` hook provides a reactive `$wire` proxy for reading and writing Livewire state:
+Use `bridge:react` to mark a `<script>` block for Vite processing and React component export. Use a `wire:ref` target to mount the component. The `useWire()` hook provides a reactive `$wire` proxy for reading and writing Livewire state:
 
 ```blade
 <div wire:ref="app" wire:ignore></div>
 
-<script lang="tsx" data-react="app">
+<script lang="tsx" bridge:react="app">
     import { useWire } from "@petecoop/livewire-bridge/react";
 
     export default function Counter() {

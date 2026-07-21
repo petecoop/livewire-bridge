@@ -2,6 +2,14 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "petecoop/livewire-bridge",
     "description": "Vite-powered client components and scripts for Livewire.",
+    "keywords": [
+        "laravel",
+        "livewire",
+        "vite",
+        "react",
+        "client components",
+        "fast refresh"
+    ],
     "type": "library",
     "license": "MIT",
     "require": {

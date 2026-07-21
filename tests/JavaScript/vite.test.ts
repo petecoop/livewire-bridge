@@ -90,7 +90,7 @@ describe("livewireBridge", () => {
             path.join(root, source),
             `
             <div wire:ref="app"></div>
-            <script lang="tsx" data-react="app">
+            <script lang="tsx" bridge:react="app">
                 export default function Counter() {
                     return <button>Count</button>;
                 }
@@ -153,7 +153,7 @@ describe("livewireBridge", () => {
             absoluteSource,
             `
             <div wire:ref="counter"></div>
-            <script lang="tsx" data-react="counter">
+            <script lang="tsx" bridge:react="counter">
                 export default function Counter() { return <p>Current</p>; }
             </script>
         `,
@@ -181,7 +181,7 @@ describe("livewireBridge", () => {
         fs.writeFileSync(
             path.join(root, source),
             `
-            <script lang="ts" data-vite>
+            <script lang="ts" bridge>
                 import { format } from "./format";
                 $js("formatted", () => format($wire.count));
             </script>
@@ -204,7 +204,7 @@ describe("livewireBridge", () => {
             path.join(root, source),
             `
             <div wire:ref="other"></div>
-            <script data-react="app">const Component = () => null;</script>
+            <script bridge:react="app">const Component = () => null;</script>
         `,
         );
         const plugin = livewireBridge({ paths: ["resources/views"] });
@@ -222,7 +222,7 @@ describe("livewireBridge", () => {
         const absoluteSource = path.join(root, source);
         const before = `
             <div wire:ref="app">Stable markup</div>
-            <script data-react="app">export default function Counter() { return <p>Before</p>; }</script>
+            <script bridge:react="app">export default function Counter() { return <p>Before</p>; }</script>
         `;
         const after = before.replace("Before", "After");
         fs.writeFileSync(absoluteSource, before);
@@ -255,7 +255,7 @@ describe("livewireBridge", () => {
         const absoluteSource = path.join(root, source);
         const before = `
             <div wire:ref="app">Before</div>
-            <script data-react="app">export default function Counter() { return null; }</script>
+            <script bridge:react="app">export default function Counter() { return null; }</script>
         `;
         const after = before.replace(">Before</div>", ">After</div>");
         fs.writeFileSync(absoluteSource, before);

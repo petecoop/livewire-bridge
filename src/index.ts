@@ -158,7 +158,7 @@ export default function livewireBridge(pluginOptions: LivewireBridgeOptions = {}
 
             if (definition === null) {
                 throw new Error(
-                    `No <script data-vite> or <script data-react="…"> block found in ${relativePath}`,
+                    `No <script bridge> or <script bridge:react="…"> block found in ${relativePath}`,
                 );
             }
 
@@ -170,7 +170,7 @@ export default function livewireBridge(pluginOptions: LivewireBridgeOptions = {}
             if (isComponent) {
                 if (definition.type !== "react") {
                     throw new Error(
-                        `A React component module was requested for the data-vite script in ${relativePath}`,
+                        `A React component module was requested for the bridge script in ${relativePath}`,
                     );
                 }
 
@@ -260,7 +260,9 @@ function discoverScripts(paths: string[]): string[] {
     return [...new Set(files)].filter((file) => {
         return (
             file.endsWith(".blade.php") &&
-            /<script\b[^>]*(?:\bdata-vite\b|\bdata-react\b)/.test(fs.readFileSync(file, "utf8"))
+            /<script\b[^>]*(?:\sbridge(?:\s|=|>)|\sbridge:react\s*=)/.test(
+                fs.readFileSync(file, "utf8"),
+            )
         );
     });
 }
@@ -323,15 +325,15 @@ function extractScriptDefinition(
 
     while ((match = expression.exec(blade)) !== null) {
         const attributes = match[1];
-        const hasVite = /(?:^|\s)data-vite(?:\s|=|$)/.test(attributes);
-        const hasReact = /(?:^|\s)data-react(?:\s|=|$)/.test(attributes);
+        const hasVite = /(?:^|\s)bridge(?:\s|=|$)/.test(attributes);
+        const hasReact = /(?:^|\s)bridge:react(?:\s|=|$)/.test(attributes);
 
         if (!hasVite && !hasReact) {
             continue;
         }
 
         if (hasVite && hasReact) {
-            throw new Error(`A script cannot use both data-vite and data-react in ${relativePath}`);
+            throw new Error(`A script cannot use both bridge and bridge:react in ${relativePath}`);
         }
 
         const openTagLength = match[0].indexOf(">");
@@ -348,12 +350,12 @@ function extractScriptDefinition(
             return { ...definition, type: "vite", ref: null };
         }
 
-        const refMatch = attributes.match(/(?:^|\s)data-react\s*=\s*(["'])(.*?)\1/);
+        const refMatch = attributes.match(/(?:^|\s)bridge:react\s*=\s*(["'])(.*?)\1/);
         const ref = refMatch?.[2]?.trim();
 
         if (!ref) {
             throw new Error(
-                `<script data-react> requires a non-empty quoted ref name in ${relativePath}`,
+                `<script bridge:react> requires a non-empty quoted ref name in ${relativePath}`,
             );
         }
 
@@ -378,7 +380,7 @@ function assertReactTarget(
 
     if (!target.test(markup)) {
         throw new Error(
-            `<script data-react="${definition.ref}"> requires wire:ref="${definition.ref}" in ${relativePath}`,
+            `<script bridge:react="${definition.ref}"> requires wire:ref="${definition.ref}" in ${relativePath}`,
         );
     }
 }
@@ -390,7 +392,7 @@ function assertReactComponentExport(definition: ReactScriptDefinition, relativeP
 
     if (!hasDefaultExport) {
         throw new Error(
-            `<script data-react="${definition.ref}"> must export a default React component in ${relativePath}`,
+            `<script bridge:react="${definition.ref}"> must export a default React component in ${relativePath}`,
         );
     }
 }

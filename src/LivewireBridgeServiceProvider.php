@@ -46,7 +46,7 @@ class LivewireBridgeServiceProvider extends ServiceProvider
 
     private function replaceBridgeScripts(string $contents, string $path): string
     {
-        if (! str_contains($contents, 'data-vite') && ! str_contains($contents, 'data-react')) {
+        if (! str_contains($contents, 'bridge')) {
             return $contents;
         }
 
@@ -56,7 +56,7 @@ class LivewireBridgeServiceProvider extends ServiceProvider
         $specifier = json_encode($moduleUrl, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
         return preg_replace(
-            '/<script\b(?=[^>]*(?:\bdata-vite\b|\bdata-react\b))[^>]*>.*?<\/script>/s',
+            '/<script\b(?=[^>]*(?:\sbridge(?:\s|=|>)|\sbridge:react\s*=))[^>]*>.*?<\/script>/s',
             <<<HTML
             <script>
                 import { run as runBridgeModule } from {$specifier};
