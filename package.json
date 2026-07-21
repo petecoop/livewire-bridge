@@ -1,6 +1,6 @@
 {
     "name": "@petecoop/livewire-bridge",
-    "version": "0.0.0",
+    "version": "0.0.1",
     "description": "Vite-powered client components and scripts for Livewire.",
     "keywords": [
         "laravel",
