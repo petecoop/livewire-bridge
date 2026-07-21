@@ -44,3 +44,16 @@ it('reacts to nested state and remounts after wire navigation', function () {
         ->assertSeeIn('@react-counter', 'React: 0')
         ->assertNoJavaScriptErrors();
 })->group('browser');
+
+it('mounts an explicitly named React multi-file component', function () {
+    $page = visit('/mfc')
+        ->assertSeeIn('@mfc-livewire-counter', 'Livewire: 0')
+        ->assertSeeIn('@mfc-react-counter', 'React: 0');
+
+    $page->click('@mfc-react-counter')
+        ->assertSeeIn('@mfc-react-counter', 'React: 1')
+        ->click('@mfc-livewire-counter')
+        ->assertSeeIn('@mfc-livewire-counter', 'Livewire: 2')
+        ->assertSeeIn('@mfc-react-counter', 'React: 2')
+        ->assertNoJavaScriptErrors();
+})->group('browser');

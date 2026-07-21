@@ -17,6 +17,22 @@ function fixtureRoot(): string {
     return root;
 }
 
+function multiFileFixture(
+    root: string,
+    name: string,
+    extension: string,
+    script: string,
+    view = "<div></div>",
+): string {
+    const directory = path.join(root, "resources/views/pages", `⚡${name}`);
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, `${name}.php`), "<?php new class {};\n");
+    fs.writeFileSync(path.join(directory, `${name}.blade.php`), view);
+    fs.writeFileSync(path.join(directory, `${name}.${extension}`), script);
+
+    return `resources/views/pages/⚡${name}/${name}.${extension}`;
+}
+
 function hook(plugin: Plugin, name: keyof Plugin): (...arguments_: any[]) => any {
     const candidate = plugin[name];
 
@@ -173,6 +189,119 @@ describe("livewireBridge", () => {
         expect(component.code).toContain("export default function Counter");
         expect(component.code).not.toContain("wire:ref");
         expect(context.addWatchFile).toHaveBeenCalledWith(absoluteSource);
+    });
+
+    it("resolves an explicitly named React MFC with its exported wire ref", async () => {
+        const root = fixtureRoot();
+        const source = multiFileFixture(
+            root,
+            "counter",
+            "react.tsx",
+            `
+                import { useState } from "react";
+                export const wireRef = "widget";
+                export default function Counter() {
+                    const [count] = useState(0);
+                    return <p>{count}</p>;
+                }
+            `,
+            '<div wire:ref="widget"></div>',
+        );
+        const absoluteSource = path.join(root, source);
+        const plugin = livewireBridge();
+        hook(plugin, "configResolved")({ root, command: "serve" });
+
+        const entryId = hook(plugin, "resolveId")(`/@livewire-bridge/${encode(source)}`);
+        const componentId = hook(
+            plugin,
+            "resolveId",
+        )(`/@livewire-bridge-component/${encode(source)}`);
+        const context = { addWatchFile: vi.fn() };
+        const entry = await hook(plugin, "load").call(context, entryId);
+        const component = await hook(plugin, "load").call(context, componentId);
+
+        expect(entry.code).toContain('const ref = "widget"');
+        expect(component.code).toContain("export default function Counter");
+        expect(context.addWatchFile).toHaveBeenCalledWith(absoluteSource);
+        expect(context.addWatchFile).toHaveBeenCalledWith(
+            path.join(root, "resources/views/pages/⚡counter/counter.blade.php"),
+        );
+    });
+
+    it("treats a bare TSX MFC companion as a general bridge script", async () => {
+        const root = fixtureRoot();
+        const source = multiFileFixture(
+            root,
+            "manual",
+            "tsx",
+            'const element = <span>Ready</span>; $js("element", () => element);',
+        );
+        const plugin = livewireBridge();
+        hook(plugin, "configResolved")({ root, command: "serve" });
+        const entryId = hook(plugin, "resolveId")(`/@livewire-bridge/${encode(source)}`);
+        const entry = await hook(plugin, "load").call({ addWatchFile: vi.fn() }, entryId);
+
+        expect(entry.code).toContain("export function run($wire, $js)");
+        expect(entry.code).not.toContain("createRoot");
+    });
+
+    it("requires React MFCs to export their mount ref", async () => {
+        const root = fixtureRoot();
+        const source = multiFileFixture(
+            root,
+            "missing-ref",
+            "react.jsx",
+            "export default function Component() { return null; }",
+        );
+        const plugin = livewireBridge();
+        hook(plugin, "configResolved")({ root, command: "serve" });
+        const entryId = hook(plugin, "resolveId")(`/@livewire-bridge/${encode(source)}`);
+
+        expect(() => hook(plugin, "load").call({ addWatchFile: vi.fn() }, entryId)).toThrow(
+            "must export a non-empty string as wireRef",
+        );
+    });
+
+    it("builds typed and imported MFC scripts while leaving plain JavaScript to Livewire", async () => {
+        const root = fixtureRoot();
+        const typedSource = multiFileFixture(
+            root,
+            "typed",
+            "ts",
+            "const count: number = $wire.count; $js('count', () => count);",
+        );
+        const importedSource = multiFileFixture(
+            root,
+            "imported",
+            "js",
+            'import "./helper.js";\n$js("ready", () => true);',
+        );
+        const plainSource = multiFileFixture(root, "plain", "js", '$js("ready", () => true);');
+        fs.writeFileSync(
+            path.join(root, "resources/views/pages/⚡imported/helper.js"),
+            "export {};\n",
+        );
+
+        await build({
+            root,
+            logLevel: "silent",
+            plugins: [livewireBridge()],
+            build: {
+                emptyOutDir: true,
+                manifest: "manifest.json",
+                minify: false,
+                outDir: "dist",
+                rollupOptions: { input: [] },
+            },
+        });
+
+        const manifest = JSON.parse(
+            fs.readFileSync(path.join(root, "dist/manifest.json"), "utf8"),
+        ) as Record<string, unknown>;
+
+        expect(manifest).toHaveProperty(`${typedSource}.livewire-entry.tsx`);
+        expect(manifest).toHaveProperty(`${importedSource}.livewire-entry.tsx`);
+        expect(manifest).not.toHaveProperty(`${plainSource}.livewire-entry.tsx`);
     });
 
     it("keeps static imports outside general script run functions", async () => {

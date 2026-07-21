@@ -5,7 +5,9 @@ namespace LivewireBridge;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Compiler\Compiler;
 use Livewire\Livewire;
+use LivewireBridge\Compiler\BridgeCompiler;
 
 class LivewireBridgeServiceProvider extends ServiceProvider
 {
@@ -16,6 +18,10 @@ class LivewireBridgeServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/livewire-bridge.php', 'livewire-bridge');
+
+        $this->app->extend('livewire.compiler', function (Compiler $compiler): BridgeCompiler {
+            return new BridgeCompiler($compiler->cacheManager);
+        });
     }
 
     public function boot(): void

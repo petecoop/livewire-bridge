@@ -17,7 +17,7 @@ npm install react react-dom
 npm install --save-dev @vitejs/plugin-react
 ```
 
-## Vite configuration
+### Vite configuration
 
 ```js
 import laravel, { refreshPaths } from "laravel-vite-plugin";
@@ -58,7 +58,7 @@ Publish `config/livewire-bridge.php` and set the corresponding absolute PHP
 paths when they differ from Livewire's configured component locations and
 namespaces.
 
-## Importing in script blocks
+## Import
 
 Use `bridge` to mark a `<script>` block for Vite processing. `$wire` and `$js` are available in the script:
 
@@ -102,3 +102,39 @@ records no render dependencies.
 
 The hook updates for Alpine mutations, React proxy writes, and server responses
 without creating `$watch` subscriptions.
+
+## Multi-file components
+
+The bridge automatically handles a script next to a Livewire multi-file
+component when its filename matches the component and one of these conditions
+is true:
+
+- `.js` files use the bridge when they contain an `import`; plain JavaScript
+  stays on Livewire's native script path.
+- `.jsx`, `.ts`, and `.tsx` files run as general bridge scripts with `$wire`
+  and `$js` in scope.
+- `.react.jsx` and `.react.tsx` files use the React adapter. They must export a
+  `wireRef` string naming the mount target and default-export the component.
+
+```text
+resources/views/pages/⚡counter/
+├── counter.php
+├── counter.blade.php
+└── counter.react.tsx
+```
+
+```blade
+<div wire:ref="counter" wire:ignore></div>
+```
+
+```tsx
+import { useWire } from "@petecoop/livewire-bridge/react";
+
+export const wireRef = "counter";
+
+export default function Counter() {
+  const $wire = useWire<{ count: number }>();
+
+  return <button onClick={() => $wire.count++}>{$wire.count}</button>;
+}
+```

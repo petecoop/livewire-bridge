@@ -38,6 +38,7 @@ type ResolvedOptions = {
 type BaseScriptDefinition = {
     code: string;
     end: number;
+    external: boolean;
     openTag: string;
     closeTag: string;
     start: number;
@@ -151,19 +152,25 @@ export default function livewireBridge(pluginOptions: LivewireBridgeOptions = {}
 
             this.addWatchFile(absolutePath);
 
-            const blade = fs.readFileSync(absolutePath, "utf8");
-            const definition = extractScriptDefinition(blade, relativePath);
+            const source = fs.readFileSync(absolutePath, "utf8");
+            const definition = extractFileDefinition(absolutePath, source, relativePath);
 
-            sourceCache.set(absolutePath, blade);
+            sourceCache.set(absolutePath, source);
 
             if (definition === null) {
-                throw new Error(
-                    `No <script bridge> or <script bridge:react="…"> block found in ${relativePath}`,
-                );
+                throw new Error(`No bridge script found in ${relativePath}`);
             }
 
             if (definition.type === "react") {
-                assertReactTarget(blade, definition, relativePath);
+                const markup = definition.external
+                    ? fs.readFileSync(multiFileViewPath(absolutePath)!, "utf8")
+                    : source;
+
+                if (definition.external) {
+                    this.addWatchFile(multiFileViewPath(absolutePath)!);
+                }
+
+                assertReactTarget(markup, definition, relativePath);
                 assertReactComponentExport(definition, relativePath);
             }
 
@@ -208,8 +215,10 @@ export default function livewireBridge(pluginOptions: LivewireBridgeOptions = {}
             const previousSource = sourceCache.get(absolutePath);
             const nextSource = await context.read();
             const previousDefinition =
-                previousSource === undefined ? null : extractScriptDefinition(previousSource);
-            const nextDefinition = extractScriptDefinition(nextSource);
+                previousSource === undefined
+                    ? null
+                    : extractFileDefinition(absolutePath, previousSource);
+            const nextDefinition = extractFileDefinition(absolutePath, nextSource);
             const scriptOnlyChange =
                 previousSource !== undefined &&
                 previousDefinition !== null &&
@@ -258,12 +267,7 @@ function discoverScripts(paths: string[]): string[] {
     }
 
     return [...new Set(files)].filter((file) => {
-        return (
-            file.endsWith(".blade.php") &&
-            /<script\b[^>]*(?:\sbridge(?:\s|=|>)|\sbridge:react\s*=)/.test(
-                fs.readFileSync(file, "utf8"),
-            )
-        );
+        return extractFileDefinition(file, fs.readFileSync(file, "utf8")) !== null;
     });
 }
 
@@ -341,6 +345,7 @@ function extractScriptDefinition(
         const definition: BaseScriptDefinition = {
             code: match[2],
             end: match.index + match[0].length,
+            external: false,
             openTag: match[0].slice(0, openTagLength + 1),
             closeTag: match[0].slice(closeTagStart),
             start: match.index,
@@ -365,7 +370,104 @@ function extractScriptDefinition(
     return null;
 }
 
+function extractFileDefinition(
+    file: string,
+    source: string,
+    relativePath = "the Livewire source",
+): ScriptDefinition | null {
+    if (file.endsWith(".blade.php")) {
+        return extractScriptDefinition(source, relativePath);
+    }
+
+    const multiFileScript = resolveMultiFileScript(file);
+
+    if (multiFileScript === null) {
+        return null;
+    }
+
+    const extension = path.extname(file);
+
+    if (extension === ".js" && !hasModuleImport(source)) {
+        return null;
+    }
+
+    const definition: BaseScriptDefinition = {
+        code: source,
+        end: source.length,
+        external: true,
+        openTag: "",
+        closeTag: "",
+        start: 0,
+    };
+
+    if (multiFileScript.react) {
+        return {
+            ...definition,
+            type: "react",
+            ref: extractReactWireRef(source, relativePath),
+        };
+    }
+
+    return { ...definition, type: "vite", ref: null };
+}
+
+type MultiFileScript = {
+    react: boolean;
+    viewPath: string;
+};
+
+function resolveMultiFileScript(file: string): MultiFileScript | null {
+    const extension = path.extname(file);
+
+    if (![".js", ".jsx", ".ts", ".tsx"].includes(extension)) {
+        return null;
+    }
+
+    const directory = path.dirname(file);
+    const componentName = path.basename(directory).replace(/^⚡[\uFE0E\uFE0F]?/u, "");
+    const sourceName = path.basename(file, extension);
+    const react =
+        (extension === ".jsx" || extension === ".tsx") &&
+        sourceName === `${componentName}.react`;
+
+    if (sourceName !== componentName && !react) {
+        return null;
+    }
+
+    const classPath = path.join(directory, `${componentName}.php`);
+    const viewPath = path.join(directory, `${componentName}.blade.php`);
+
+    return fs.existsSync(classPath) && fs.existsSync(viewPath) ? { react, viewPath } : null;
+}
+
+function multiFileViewPath(file: string): string | null {
+    return resolveMultiFileScript(file)?.viewPath ?? null;
+}
+
+function extractReactWireRef(source: string, relativePath: string): string {
+    const match = source.match(
+        /\bexport\s+const\s+wireRef\s*(?::[^=]+)?=\s*(["'`])([^"'`]+)\1/,
+    );
+    const ref = match?.[2]?.trim();
+
+    if (!ref) {
+        throw new Error(
+            `React MFC ${relativePath} must export a non-empty string as wireRef`,
+        );
+    }
+
+    return ref;
+}
+
+function hasModuleImport(source: string): boolean {
+    return /(?:^|\n)\s*import(?:\s|\()/.test(source);
+}
+
 function withoutScriptContents(blade: string, definition: ScriptDefinition): string {
+    if (definition.external) {
+        return "";
+    }
+
     return `${blade.slice(0, definition.start)}${definition.openTag}${definition.closeTag}${blade.slice(definition.end)}`;
 }
 
@@ -374,13 +476,17 @@ function assertReactTarget(
     definition: ReactScriptDefinition,
     relativePath: string,
 ): void {
-    const markup = withoutScriptContents(blade, definition);
+    const markup = definition.external ? blade : withoutScriptContents(blade, definition);
     const ref = escapeRegExp(definition.ref);
     const target = new RegExp(`\\bwire:ref\\s*=\\s*(["'])${ref}\\1`);
 
     if (!target.test(markup)) {
+        const source = definition.external
+            ? `React MFC ${relativePath}`
+            : `<script bridge:react="${definition.ref}">`;
+
         throw new Error(
-            `<script bridge:react="${definition.ref}"> requires wire:ref="${definition.ref}" in ${relativePath}`,
+            `${source} requires wire:ref="${definition.ref}" in ${relativePath}`,
         );
     }
 }
@@ -391,9 +497,11 @@ function assertReactComponentExport(definition: ReactScriptDefinition, relativeP
         /\bexport\s*{[^}]*\bas\s+default\b[^}]*}/s.test(definition.code);
 
     if (!hasDefaultExport) {
-        throw new Error(
-            `<script bridge:react="${definition.ref}"> must export a default React component in ${relativePath}`,
-        );
+        const source = definition.external
+            ? `React MFC ${relativePath}`
+            : `<script bridge:react="${definition.ref}">`;
+
+        throw new Error(`${source} must export a default React component`);
     }
 }
 
