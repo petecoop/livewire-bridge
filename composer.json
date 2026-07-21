@@ -25,31 +25,6 @@
         "pestphp/pest-plugin-browser": "^4.3",
         "pestphp/pest-plugin-laravel": "^4.1"
     },
-    "archive": {
-        "exclude": [
-            "/.gitattributes",
-            "/.gitignore",
-            "/.github",
-            "/.npmignore",
-            "/tests",
-            "/workbench",
-            "/composer.lock",
-            "/dist",
-            "/node_modules",
-            "/package-lock.json",
-            "/package.json",
-            "/phpunit.xml",
-            "/src/*.ts",
-            "/src/entries",
-            "/testbench.yaml",
-            "/todo.md",
-            "/tsconfig.test.json",
-            "/tsconfig.json",
-            "/tsdown.config.ts",
-            "/vendor",
-            "/vitest.config.ts"
-        ]
-    },
     "extra": {
         "laravel": {
             "providers": [
