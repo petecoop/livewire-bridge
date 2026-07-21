@@ -103,6 +103,41 @@ it('compiles bridge scripts in class component Blade views', function () {
         ->not->toContain('bridge:react="widget"');
 });
 
+it('does not bridge ordinary class component Blade views', function (string $name, string $contents, string $expected) {
+    $path = resource_path('views/livewire/'.$name.'.blade.php');
+    $filesystem = new Filesystem;
+    $filesystem->ensureDirectoryExists(dirname($path));
+    $filesystem->put($path, $contents);
+
+    $compiler = app('blade.compiler');
+    $compiler->setPath($path);
+    $compiled = $compiler->compileString($filesystem->get($path));
+
+    expect($compiled)
+        ->toContain($expected)
+        ->not->toContain('/bridge/')
+        ->not->toContain('runBridgeModule');
+})->with([
+    'without scripts' => [
+        'no-script-counter',
+        '<button wire:click="increment">Livewire only</button>',
+        'Livewire only',
+    ],
+    'with an unmarked script using $wire' => [
+        'unmarked-script-counter',
+        <<<'BLADE'
+        <button wire:click="$js.increment">Alpine: <span x-text="$wire.count"></span></button>
+
+        @script
+        <script>
+            $js('increment', () => $wire.count++);
+        </script>
+        @endscript
+        BLADE,
+        '$js(\'increment\', () => $wire.count++);',
+    ],
+]);
+
 it('serves a production wrapper for a built fixture module', function () {
     $response = $this->get(app('livewire')->getUriPrefix().'/bridge/'.fixtureSource().'.js');
 

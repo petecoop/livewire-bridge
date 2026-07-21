@@ -70,3 +70,25 @@ it('mounts React from a class component script block', function () {
         ->assertSeeIn('@class-react-counter', 'React: 2')
         ->assertNoJavaScriptErrors();
 })->group('browser');
+
+it('leaves class components without scripts on the native Livewire path', function () {
+    $page = visit('/class/no-script')
+        ->assertSeeIn('@no-script-livewire-counter', 'Livewire: 0');
+
+    $page->click('@no-script-livewire-counter')
+        ->assertSeeIn('@no-script-livewire-counter', 'Livewire: 1')
+        ->assertNoJavaScriptErrors();
+})->group('browser');
+
+it('leaves unmarked class component scripts on the native Livewire path', function () {
+    $page = visit('/class/unmarked-script')
+        ->assertSeeIn('@unmarked-script-livewire-counter', 'Livewire: 0')
+        ->assertSeeIn('@unmarked-script-wire-counter', 'Alpine: 0');
+
+    $page->click('@unmarked-script-wire-counter')
+        ->assertSeeIn('@unmarked-script-wire-counter', 'Alpine: 1')
+        ->click('@unmarked-script-livewire-counter')
+        ->assertSeeIn('@unmarked-script-livewire-counter', 'Livewire: 2')
+        ->assertSeeIn('@unmarked-script-wire-counter', 'Alpine: 2')
+        ->assertNoJavaScriptErrors();
+})->group('browser');
