@@ -2,8 +2,8 @@ import { defineConfig } from "tsdown";
 
 export default defineConfig({
     entry: {
-        runtime: "src/runtime.ts",
-        vite: "src/vite.ts",
+        index: "src/index.ts",
+        "react-runtime": "src/react-runtime.ts",
     },
     format: "esm",
     fixedExtension: false,

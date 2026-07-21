@@ -1,34 +1,34 @@
 <?php
 
-namespace LivewireViteReact;
+namespace LivewireBridge;
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 
-class LivewireViteReactServiceProvider extends ServiceProvider
+class LivewireBridgeServiceProvider extends ServiceProvider
 {
-    private const ENTRY_PREFIX = '/@livewire-vite/';
+    private const ENTRY_PREFIX = '/@livewire-bridge/';
 
     private const ENTRY_SUFFIX = '.livewire-entry.tsx';
 
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/livewire-vite-react.php', 'livewire-vite-react');
+        $this->mergeConfigFrom(__DIR__.'/../config/livewire-bridge.php', 'livewire-bridge');
     }
 
     public function boot(): void
     {
         $this->publishes([
-            __DIR__.'/../config/livewire-vite-react.php' => config_path('livewire-vite-react.php'),
-        ], 'livewire-vite-react-config');
+            __DIR__.'/../config/livewire-bridge.php' => config_path('livewire-bridge.php'),
+        ], 'livewire-bridge-config');
 
         Livewire::prepareViewsForCompilationUsing(
-            fn (string $contents, string $path): string => $this->replaceViteScripts($contents, $path),
+            fn (string $contents, string $path): string => $this->replaceBridgeScripts($contents, $path),
         );
 
-        Route::get(app('livewire')->getUriPrefix().'/vite/{source}.js', function (string $source) {
+        Route::get(app('livewire')->getUriPrefix().'/bridge/{source}.js', function (string $source) {
             $path = $this->decodeSource($source);
 
             abort_unless($path !== null && $this->isSourcePath($path), 404);
@@ -41,10 +41,10 @@ class LivewireViteReactServiceProvider extends ServiceProvider
             return response("export { run } from {$specifier};\n")
                 ->header('Content-Type', 'text/javascript; charset=UTF-8')
                 ->header('Cache-Control', 'no-store');
-        })->where('source', '[A-Za-z0-9_-]+')->name('livewire-vite-react.module');
+        })->where('source', '[A-Za-z0-9_-]+')->name('livewire-bridge.module');
     }
 
-    private function replaceViteScripts(string $contents, string $path): string
+    private function replaceBridgeScripts(string $contents, string $path): string
     {
         if (! str_contains($contents, 'data-vite') && ! str_contains($contents, 'data-react')) {
             return $contents;
@@ -52,15 +52,15 @@ class LivewireViteReactServiceProvider extends ServiceProvider
 
         $relativePath = str_replace('\\', '/', ltrim(str_replace(base_path(), '', $path), DIRECTORY_SEPARATOR));
         $source = $this->encodeSource($relativePath);
-        $moduleUrl = route('livewire-vite-react.module', ['source' => $source], false);
+        $moduleUrl = route('livewire-bridge.module', ['source' => $source], false);
         $specifier = json_encode($moduleUrl, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
         return preg_replace(
             '/<script\b(?=[^>]*(?:\bdata-vite\b|\bdata-react\b))[^>]*>.*?<\/script>/s',
             <<<HTML
             <script>
-                import { run as runViteModule } from {$specifier};
-                runViteModule.call(this, \$wire, \$js);
+                import { run as runBridgeModule } from {$specifier};
+                runBridgeModule.call(this, \$wire, \$js);
             </script>
             HTML,
             $contents,
@@ -102,7 +102,7 @@ class LivewireViteReactServiceProvider extends ServiceProvider
     /** @return array<int, string> */
     private function sourcePaths(): array
     {
-        $paths = config('livewire-vite-react.paths');
+        $paths = config('livewire-bridge.paths');
 
         if (is_array($paths)) {
             return array_values(array_unique($paths));

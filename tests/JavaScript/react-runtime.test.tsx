@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { act, type ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
-import { WireProvider, useWire, type Wire } from "../../src/runtime";
+import { WireProvider, useWire, type Wire } from "../../src/react-runtime";
 
 type State = {
     count: number;

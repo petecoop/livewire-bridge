@@ -1,7 +1,7 @@
 {
-    "name": "@petecoop/livewire-vite-react",
+    "name": "@petecoop/livewire-bridge",
     "version": "0.0.0",
-    "description": "Vite-powered component scripts and React integration for Livewire.",
+    "description": "Vite-powered client components and scripts for Livewire.",
     "license": "MIT",
     "type": "module",
     "publishConfig": {
@@ -13,12 +13,12 @@
     ],
     "exports": {
         ".": {
-            "types": "./dist/runtime.d.ts",
-            "import": "./dist/runtime.js"
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
         },
-        "./vite": {
-            "types": "./dist/vite.d.ts",
-            "import": "./dist/vite.js"
+        "./react": {
+            "types": "./dist/react-runtime.d.ts",
+            "import": "./dist/react-runtime.js"
         },
         "./package.json": "./package.json"
     },

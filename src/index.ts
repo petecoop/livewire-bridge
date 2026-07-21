@@ -6,9 +6,9 @@ import { createReactEntryModule } from "./entries/react";
 
 const entrySuffix = ".livewire-entry.tsx";
 const componentSuffix = ".livewire-component.tsx";
-const entryPrefix = "/@livewire-vite/";
-const reactComponentPrefix = "/@livewire-vite-react-component/";
-const reactModule = "@petecoop/livewire-vite-react";
+const entryPrefix = "/@livewire-bridge/";
+const reactComponentPrefix = "/@livewire-bridge-component/";
+const reactModule = "@petecoop/livewire-bridge/react";
 
 export const livewirePaths = [
     "resources/views/components",
@@ -17,7 +17,17 @@ export const livewirePaths = [
     "resources/views/pages",
 ];
 
-export type LivewireViteReactOptions = {
+export function exceptLivewire(refreshPaths: readonly string[]): string[] {
+    return refreshPaths.filter((refreshPath) => {
+        const refreshRoot = refreshPath.replace(/\/\*\*$/, "");
+
+        return !livewirePaths.some((livewirePath) => {
+            return livewirePath === refreshRoot || livewirePath.startsWith(`${refreshRoot}/`);
+        });
+    });
+}
+
+export type LivewireBridgeOptions = {
     paths?: string[];
 };
 
@@ -46,7 +56,7 @@ type ReactScriptDefinition = BaseScriptDefinition & {
 type ScriptDefinition = ViteScriptDefinition | ReactScriptDefinition;
 type RollupInput = string | string[] | Record<string, string> | undefined;
 
-export default function livewireViteReact(pluginOptions: LivewireViteReactOptions = {}): Plugin {
+export default function livewireBridge(pluginOptions: LivewireBridgeOptions = {}): Plugin {
     const options = resolveOptions(pluginOptions);
     let projectRoot = "";
     let command: ResolvedConfig["command"] = "serve";
@@ -54,7 +64,7 @@ export default function livewireViteReact(pluginOptions: LivewireViteReactOption
     const sourceCache = new Map<string, string>();
 
     return {
-        name: "livewire-vite-react",
+        name: "livewire-bridge",
         enforce: "pre",
 
         config(config) {
@@ -225,12 +235,12 @@ export default function livewireViteReact(pluginOptions: LivewireViteReactOption
     };
 }
 
-function resolveOptions(options: LivewireViteReactOptions): ResolvedOptions {
+function resolveOptions(options: LivewireBridgeOptions): ResolvedOptions {
     if (
         options.paths !== undefined &&
         (!Array.isArray(options.paths) || options.paths.length === 0)
     ) {
-        throw new Error("livewireViteReact paths must be a non-empty array");
+        throw new Error("livewireBridge paths must be a non-empty array");
     }
 
     return {

@@ -8,10 +8,10 @@ function fixtureSource(): string
 }
 
 it('registers the component module route', function () {
-    $route = Route::getRoutes()->getByName('livewire-vite-react.module');
+    $route = Route::getRoutes()->getByName('livewire-bridge.module');
 
     expect($route)->not->toBeNull()
-        ->and('/'.$route->uri())->toBe(app('livewire')->getUriPrefix().'/vite/{source}.js');
+        ->and('/'.$route->uri())->toBe(app('livewire')->getUriPrefix().'/bridge/{source}.js');
 });
 
 it('compiles marked scripts into the Livewire module bridge', function () {
@@ -22,7 +22,7 @@ it('compiles marked scripts into the Livewire module bridge', function () {
 });
 
 it('serves a production wrapper for a built fixture module', function () {
-    $response = $this->get(app('livewire')->getUriPrefix().'/vite/'.fixtureSource().'.js');
+    $response = $this->get(app('livewire')->getUriPrefix().'/bridge/'.fixtureSource().'.js');
 
     $response->assertOk()
         ->assertHeader('Content-Type', 'text/javascript; charset=UTF-8');
@@ -36,5 +36,5 @@ it('serves a production wrapper for a built fixture module', function () {
 it('refuses module sources outside configured view directories', function () {
     $outsideSource = rtrim(strtr(base64_encode('composer.json'), '+/', '-_'), '=');
 
-    $this->get(app('livewire')->getUriPrefix().'/vite/'.$outsideSource.'.js')->assertNotFound();
+    $this->get(app('livewire')->getUriPrefix().'/bridge/'.$outsideSource.'.js')->assertNotFound();
 });

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
-import livewireViteReact from "../../src/vite";
+import livewireBridge from "../../src/index";
 
 const fixtureDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageDirectory = path.resolve(fixtureDirectory, "../..");
@@ -9,7 +9,7 @@ const packageDirectory = path.resolve(fixtureDirectory, "../..");
 export default defineConfig({
     publicDir: false,
     root: path.join(packageDirectory, "workbench"),
-    plugins: [livewireViteReact()],
+    plugins: [livewireBridge()],
     build: {
         emptyOutDir: true,
         manifest: "manifest.json",

@@ -1,7 +1,7 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "petecoop/livewire-vite-react",
-    "description": "Vite-powered component scripts and React integration for Livewire.",
+    "name": "petecoop/livewire-bridge",
+    "description": "Vite-powered client components and scripts for Livewire.",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -11,7 +11,7 @@
     },
     "autoload": {
         "psr-4": {
-            "LivewireViteReact\\": "src/"
+            "LivewireBridge\\": "src/"
         }
     },
     "autoload-dev": {
@@ -28,7 +28,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "LivewireViteReact\\LivewireViteReactServiceProvider"
+                "LivewireBridge\\LivewireBridgeServiceProvider"
             ]
         }
     },

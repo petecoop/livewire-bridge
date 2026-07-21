@@ -4,7 +4,7 @@ namespace Tests;
 
 use Illuminate\Filesystem\Filesystem;
 use Livewire\LivewireServiceProvider;
-use LivewireViteReact\LivewireViteReactServiceProvider;
+use LivewireBridge\LivewireBridgeServiceProvider;
 use Orchestra\Testbench\Concerns\WithWorkbench;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -16,7 +16,7 @@ abstract class TestCase extends Orchestra
     {
         return [
             LivewireServiceProvider::class,
-            LivewireViteReactServiceProvider::class,
+            LivewireBridgeServiceProvider::class,
         ];
     }
 

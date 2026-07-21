@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Livewire Vite React fixture</title>
+    <title>Livewire Bridge fixture</title>
     @livewireStyles
 </head>
 <body>

@@ -5,12 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { build, type Plugin } from "vite";
-import livewireViteReact, { livewirePaths } from "../../src/vite";
+import livewireBridge, { exceptLivewire, livewirePaths } from "../../src/index";
 
 const temporaryDirectories: string[] = [];
 
 function fixtureRoot(): string {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "livewire-vite-react-"));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "livewire-bridge-"));
     temporaryDirectories.push(root);
     fs.mkdirSync(path.join(root, "resources/views"), { recursive: true });
 
@@ -41,7 +41,7 @@ afterEach(() => {
     }
 });
 
-describe("livewireViteReact", () => {
+describe("livewireBridge", () => {
     it("exports Livewire's default component paths", () => {
         expect(livewirePaths).toEqual([
             "resources/views/components",
@@ -51,8 +51,24 @@ describe("livewireViteReact", () => {
         ]);
     });
 
+    it("excludes refresh paths that contain Livewire components", () => {
+        const refreshPaths = [
+            "app/Livewire/**",
+            "app/View/Components/**",
+            "resources/views/**",
+            "routes/**",
+        ];
+
+        expect(exceptLivewire(refreshPaths)).toEqual([
+            "app/Livewire/**",
+            "app/View/Components/**",
+            "routes/**",
+        ]);
+        expect(refreshPaths).toHaveLength(4);
+    });
+
     it("deduplicates React when the package is linked into an application", () => {
-        const plugin = livewireViteReact();
+        const plugin = livewireBridge();
         const config = hook(plugin, "config")({
             resolve: { dedupe: ["existing-package", "react"] },
         });
@@ -85,12 +101,12 @@ describe("livewireViteReact", () => {
         await build({
             root,
             logLevel: "silent",
-            plugins: [livewireViteReact()],
+            plugins: [livewireBridge()],
             resolve: {
                 alias: [
                     {
-                        find: "@petecoop/livewire-vite-react",
-                        replacement: path.resolve("src/runtime.ts"),
+                        find: "@petecoop/livewire-bridge/react",
+                        replacement: path.resolve("src/react-runtime.ts"),
                     },
                     {
                         find: "react-dom/client",
@@ -142,12 +158,12 @@ describe("livewireViteReact", () => {
             </script>
         `,
         );
-        const plugin = livewireViteReact({ paths: ["resources/views"] });
+        const plugin = livewireBridge({ paths: ["resources/views"] });
         hook(plugin, "configResolved")({ root, command: "serve" });
 
         const encoded = encode(source);
-        const entryId = hook(plugin, "resolveId")(`/@livewire-vite/${encoded}`);
-        const componentId = hook(plugin, "resolveId")(`/@livewire-vite-react-component/${encoded}`);
+        const entryId = hook(plugin, "resolveId")(`/@livewire-bridge/${encoded}`);
+        const componentId = hook(plugin, "resolveId")(`/@livewire-bridge-component/${encoded}`);
         const context = { addWatchFile: vi.fn() };
         const entry = await hook(plugin, "load").call(context, entryId);
         const component = await hook(plugin, "load").call(context, componentId);
@@ -171,9 +187,9 @@ describe("livewireViteReact", () => {
             </script>
         `,
         );
-        const plugin = livewireViteReact({ paths: ["resources/views"] });
+        const plugin = livewireBridge({ paths: ["resources/views"] });
         hook(plugin, "configResolved")({ root, command: "serve" });
-        const id = hook(plugin, "resolveId")(`/@livewire-vite/${encode(source)}`);
+        const id = hook(plugin, "resolveId")(`/@livewire-bridge/${encode(source)}`);
         const loaded = await hook(plugin, "load").call({ addWatchFile: vi.fn() }, id);
 
         expect(loaded.code).toMatch(/^import \{ format \} from "\.\/format";/);
@@ -191,9 +207,9 @@ describe("livewireViteReact", () => {
             <script data-react="app">const Component = () => null;</script>
         `,
         );
-        const plugin = livewireViteReact({ paths: ["resources/views"] });
+        const plugin = livewireBridge({ paths: ["resources/views"] });
         hook(plugin, "configResolved")({ root, command: "serve" });
-        const id = hook(plugin, "resolveId")(`/@livewire-vite/${encode(source)}`);
+        const id = hook(plugin, "resolveId")(`/@livewire-bridge/${encode(source)}`);
 
         expect(() => hook(plugin, "load").call({ addWatchFile: vi.fn() }, id)).toThrow(
             'requires wire:ref="app"',
@@ -210,9 +226,9 @@ describe("livewireViteReact", () => {
         `;
         const after = before.replace("Before", "After");
         fs.writeFileSync(absoluteSource, before);
-        const plugin = livewireViteReact({ paths: ["resources/views"] });
+        const plugin = livewireBridge({ paths: ["resources/views"] });
         hook(plugin, "configResolved")({ root, command: "serve" });
-        const entryId = hook(plugin, "resolveId")(`/@livewire-vite/${encode(source)}`);
+        const entryId = hook(plugin, "resolveId")(`/@livewire-bridge/${encode(source)}`);
         await hook(plugin, "load").call({ addWatchFile: vi.fn() }, entryId);
         const module = { id: `${absoluteSource}.livewire-component.tsx` };
         const send = vi.fn();
@@ -243,9 +259,9 @@ describe("livewireViteReact", () => {
         `;
         const after = before.replace(">Before</div>", ">After</div>");
         fs.writeFileSync(absoluteSource, before);
-        const plugin = livewireViteReact({ paths: ["resources/views"] });
+        const plugin = livewireBridge({ paths: ["resources/views"] });
         hook(plugin, "configResolved")({ root, command: "serve" });
-        const entryId = hook(plugin, "resolveId")(`/@livewire-vite/${encode(source)}`);
+        const entryId = hook(plugin, "resolveId")(`/@livewire-bridge/${encode(source)}`);
         await hook(plugin, "load").call({ addWatchFile: vi.fn() }, entryId);
         const send = vi.fn();
 

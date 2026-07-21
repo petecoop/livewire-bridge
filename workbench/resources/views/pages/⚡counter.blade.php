@@ -32,7 +32,7 @@ new class extends Component {
 
 <script lang="tsx" data-react="app">
     import { useRef } from "react";
-    import { useWire } from "@petecoop/livewire-vite-react";
+    import { useWire } from "@petecoop/livewire-bridge/react";
 
     type FixtureWire = {
         count: number;
