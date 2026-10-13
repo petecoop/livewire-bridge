@@ -1,6 +1,6 @@
 # livewire-bridge
 
-`import` inside Livewire scripts. Provides a react wrapper and `useWire()` hook for Livewire state.
+Use JavaScript imports and React components in Livewire, with `useWire()` for reading and writing Livewire state.
 
 ## Installation
 
@@ -88,20 +88,17 @@ Use `bridge:react` to mark a `<script>` block for Vite processing and React comp
 </script>
 ```
 
-The script must default-export a React component. React scripts use a stable
-root adapter and a separately refreshable component module, so compatible local
-state survives React Fast Refresh without reloading the Livewire component.
+The script must default-export a React component. React Fast Refresh preserves
+compatible local state while editing the component.
 
 ### useWire() hook
 
-`useWire()` returns a writable `$wire` proxy and tracks the reactive paths read during the committed React render.
+`useWire()` returns a writable `$wire` proxy. React updates when Livewire state
+read during rendering changes, including nested properties and arrays. Changes
+to unread properties do not trigger a render.
 
-Property writes, `$set`, and Livewire action calls continue to pass through
-the same `$wire` proxy. A `useWire()` call used only inside an event handler
-records no render dependencies.
-
-The hook updates for Alpine mutations, React proxy writes, and server responses
-without creating `$watch` subscriptions.
+Use property assignments, `$set`, and Livewire action calls as you would with
+`$wire`. Updates from Alpine and server responses are reflected in React too.
 
 ## Multi-file components
 
@@ -138,3 +135,15 @@ export default function Counter() {
   return <button onClick={() => $wire.count++}>{$wire.count}</button>;
 }
 ```
+
+
+## Assets
+
+Import CSS alongside your JavaScript:
+
+```js
+import "./counter.css";
+```
+
+Run your usual Vite development server or production build. The bridge includes
+component scripts in the build and loads their JavaScript and CSS automatically.

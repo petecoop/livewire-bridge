@@ -32,7 +32,11 @@
             "types": "./dist/react-runtime.d.ts",
             "import": "./dist/react-runtime.js"
         },
-        "./package.json": "./package.json"
+        "./package.json": "./package.json",
+        "./mount": {
+            "types": "./dist/react-mount.d.ts",
+            "import": "./dist/react-mount.js"
+        }
     },
     "scripts": {
         "build": "tsdown",
@@ -65,6 +69,8 @@
         "@testing-library/react": "^16.3.2",
         "@types/node": "^26.1.1",
         "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.2.7",
+        "@vue/reactivity": "^3.5.42",
         "jsdom": "^29.1.1",
         "playwright": "^1.61.1",
         "react": "^19.2.0",
@@ -74,5 +80,9 @@
         "typescript": "^6.0.3",
         "vite": "^8.0.0",
         "vitest": "^4.1.10"
+    },
+    "dependencies": {
+        "@babel/parser": "^7.29.8",
+        "magic-string": "^1.2.3"
     }
 }

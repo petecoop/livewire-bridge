@@ -4,6 +4,7 @@ export default defineConfig({
     entry: {
         index: "src/index.ts",
         "react-runtime": "src/react-runtime.ts",
+        "react-mount": "src/react-mount.ts",
     },
     format: "esm",
     fixedExtension: false,

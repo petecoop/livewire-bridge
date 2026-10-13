@@ -1,6 +1,8 @@
 // @vitest-environment node
 
 import fs from "node:fs";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -121,24 +123,28 @@ describe("livewireBridge", () => {
             resolve: {
                 alias: [
                     {
+                        find: "@petecoop/livewire-bridge/mount",
+                        replacement: path.resolve("src/react-mount.ts"),
+                    },
+                    {
                         find: "@petecoop/livewire-bridge/react",
                         replacement: path.resolve("src/react-runtime.ts"),
                     },
                     {
                         find: "react-dom/client",
-                        replacement: path.resolve("node_modules/react-dom/client.js"),
+                        replacement: require.resolve("react-dom/client"),
                     },
                     {
                         find: "react/jsx-runtime",
-                        replacement: path.resolve("node_modules/react/jsx-runtime.js"),
+                        replacement: require.resolve("react/jsx-runtime"),
                     },
                     {
                         find: "react/jsx-dev-runtime",
-                        replacement: path.resolve("node_modules/react/jsx-dev-runtime.js"),
+                        replacement: require.resolve("react/jsx-dev-runtime"),
                     },
                     {
                         find: "react",
-                        replacement: path.resolve("node_modules/react/index.js"),
+                        replacement: require.resolve("react"),
                     },
                 ],
             },
@@ -184,7 +190,7 @@ describe("livewireBridge", () => {
         const entry = await hook(plugin, "load").call(context, entryId);
         const component = await hook(plugin, "load").call(context, componentId);
 
-        expect(entry.code).toContain("createRoot");
+        expect(entry.code).toContain("mountReact");
         expect(entry.code).toContain('const ref = "counter"');
         expect(component.code).toContain("export default function Counter");
         expect(component.code).not.toContain("wire:ref");
@@ -242,7 +248,7 @@ describe("livewireBridge", () => {
         const entry = await hook(plugin, "load").call({ addWatchFile: vi.fn() }, entryId);
 
         expect(entry.code).toContain("export function run($wire, $js)");
-        expect(entry.code).not.toContain("createRoot");
+        expect(entry.code).not.toContain("mountReact");
     });
 
     it("requires React MFCs to export their mount ref", async () => {
@@ -268,8 +274,10 @@ describe("livewireBridge", () => {
             root,
             "typed",
             "ts",
-            "const count: number = $wire.count; $js('count', () => count);",
+            "import {\n twice,\n type Count,\n} from './helper'; const count: Count = twice($wire.count); $js('count', () => count);",
         );
+        fs.writeFileSync(path.join(root, "resources/views/pages/⚡typed/helper.ts"),
+            "export type Count = number; export const twice = (n: number) => n * 2;");
         const importedSource = multiFileFixture(
             root,
             "imported",

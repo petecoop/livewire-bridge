@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { act, type ReactNode } from "react";
+import { act, useLayoutEffect, StrictMode, type ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import { reactive, effect, stop, type ReactiveEffectRunner } from "@vue/reactivity";
 import { WireProvider, useWire, type Wire } from "../../src/react-runtime";
 
 type State = {
@@ -11,129 +12,27 @@ type State = {
 };
 
 type StateWire = Wire & State;
-type Effect = (() => void) & { dependencies: Set<Set<Effect>> };
-
 function createReactiveWire(initial: State) {
-    const dependencies = new WeakMap<object, Map<PropertyKey, Set<Effect>>>();
-    const proxies = new WeakMap<object, object>();
-    const effects = new Set<Effect>();
-    let activeEffect: Effect | null = null;
-
-    const cleanupEffect = (effect: Effect): void => {
-        for (const dependency of effect.dependencies) {
-            dependency.delete(effect);
-        }
-
-        effect.dependencies.clear();
-    };
-
-    const track = (target: object, property: PropertyKey): void => {
-        if (activeEffect === null) {
-            return;
-        }
-
-        let targetDependencies = dependencies.get(target);
-
-        if (targetDependencies === undefined) {
-            targetDependencies = new Map();
-            dependencies.set(target, targetDependencies);
-        }
-
-        let propertyEffects = targetDependencies.get(property);
-
-        if (propertyEffects === undefined) {
-            propertyEffects = new Set();
-            targetDependencies.set(property, propertyEffects);
-        }
-
-        propertyEffects.add(activeEffect);
-        activeEffect.dependencies.add(propertyEffects);
-    };
-
-    const trigger = (target: object, property: PropertyKey): void => {
-        const propertyEffects = dependencies.get(target)?.get(property);
-
-        if (propertyEffects === undefined) {
-            return;
-        }
-
-        for (const effect of [...propertyEffects]) {
-            effect();
-        }
-    };
-
-    const reactive = <T extends object>(target: T): T => {
-        const existing = proxies.get(target);
-
-        if (existing !== undefined) {
-            return existing as T;
-        }
-
-        const proxy = new Proxy(target, {
-            get(proxyTarget, property, receiver) {
-                track(proxyTarget, property);
-                const value = Reflect.get(proxyTarget, property, receiver);
-
-                return value !== null && typeof value === "object"
-                    ? reactive(value)
-                    : value;
-            },
-            set(proxyTarget, property, value, receiver) {
-                const previous = Reflect.get(proxyTarget, property, receiver);
-                const result = Reflect.set(proxyTarget, property, value, receiver);
-
-                if (!Object.is(previous, value)) {
-                    trigger(proxyTarget, property);
-                }
-
-                return result;
-            },
-        });
-
-        proxies.set(target, proxy);
-
-        return proxy;
-    };
-
     const state = reactive(structuredClone(initial));
+    const effects = new Set<ReactiveEffectRunner>();
     const wire = new Proxy({} as StateWire, {
         get(_target, property) {
-            if (property === "__instance") {
-                return () => ({ reactive: state });
-            }
-
+            if (property === "__instance") return () => ({ reactive: state });
             return Reflect.get(state, property);
         },
-        set(_target, property, value) {
-            return Reflect.set(state, property, value);
-        },
+        set(_target, property, value) { return Reflect.set(state, property, value); },
     });
-
     const alpine = {
-        effect(callback: () => void): Effect {
-            const effect = (() => {
-                cleanupEffect(effect);
-                activeEffect = effect;
-
-                try {
-                    callback();
-                } finally {
-                    activeEffect = null;
-                }
-            }) as Effect;
-
-            effect.dependencies = new Set();
-            effects.add(effect);
-            effect();
-
-            return effect;
+        effect(callback: () => void) {
+            const runner = effect(callback);
+            effects.add(runner);
+            return runner;
         },
-        release(effect: Effect): void {
-            cleanupEffect(effect);
-            effects.delete(effect);
+        release(runner: ReactiveEffectRunner) {
+            stop(runner);
+            effects.delete(runner);
         },
     };
-
     return { activeEffects: effects, alpine, state, wire };
 }
 
@@ -298,6 +197,96 @@ describe("useWire", () => {
 
         view.unmount();
 
+        expect(harness.activeEffects.size).toBe(0);
+    });
+});
+
+
+describe("useWire regression cases", () => {
+    it("observes mutations between rendering and subscribing", async () => {
+        const harness = createReactiveWire(initialState);
+        (globalThis as any).Alpine = harness.alpine;
+        function Mutator() {
+            useLayoutEffect(() => { harness.wire.count = 1; }, []);
+            return null;
+        }
+        function Counter() {
+            const wire = useWire<StateWire>();
+            return <><output data-testid="value">{wire.count}</output><Mutator /></>;
+        }
+        const view = render(provider(harness.wire, <Counter />));
+        await act(async () => { await Promise.resolve(); });
+        expect(view.getByTestId("value").textContent).toBe("1");
+    });
+
+    it("catches a newly selected dependency changing during commit", async () => {
+        const harness = createReactiveWire(initialState);
+        (globalThis as any).Alpine = harness.alpine;
+        function Mutator({ mode }: { mode: string }) {
+            useLayoutEffect(() => { if (mode === "ignored") harness.wire.ignored = 7; }, [mode]);
+            return null;
+        }
+        function Counter() {
+            const wire = useWire<StateWire>();
+            return <><output data-testid="value">{wire[wire.mode]}</output><Mutator mode={wire.mode} /></>;
+        }
+        const view = render(provider(harness.wire, <Counter />));
+        await act(async () => { harness.wire.mode = "ignored"; });
+        expect(view.getByTestId("value").textContent).toBe("7");
+    });
+
+    it("tracks own keys and membership through additions and deletions", async () => {
+        const harness = createReactiveWire(initialState);
+        (globalThis as any).Alpine = harness.alpine;
+        let renders = 0;
+        function Profile() {
+            const wire = useWire<StateWire>();
+            renders++;
+            return <output data-testid="value">{Object.keys(wire.profile).join(",")}|{String("age" in wire.profile)}</output>;
+        }
+        const view = render(provider(harness.wire, <Profile />));
+        await act(async () => { (harness.wire.profile as any).age = 30; });
+        expect(view.getByTestId("value").textContent).toBe("name,age|true");
+        const before = renders;
+        await act(async () => { (harness.wire.profile as any).age = 31; });
+        expect(renders).toBe(before);
+        await act(async () => { delete (harness.wire.profile as any).age; });
+        expect(view.getByTestId("value").textContent).toBe("name|false");
+    });
+
+    it("tracks array iteration, push, splice and replacement", async () => {
+        const harness = createReactiveWire(initialState);
+        (harness.state as any).items = [1, 2];
+        (globalThis as any).Alpine = harness.alpine;
+        function List() {
+            const wire = useWire();
+            return <output data-testid="value">{wire.items.map((n: number) => n * 2).join(",")}</output>;
+        }
+        const view = render(provider(harness.wire, <List />));
+        await act(async () => { (harness.state as any).items.push(3); });
+        expect(view.getByTestId("value").textContent).toBe("2,4,6");
+        await act(async () => { (harness.state as any).items.splice(0, 1); });
+        expect(view.getByTestId("value").textContent).toBe("4,6");
+        await act(async () => { (harness.state as any).items = [4]; });
+        expect(view.getByTestId("value").textContent).toBe("8");
+    });
+
+    it("cleans up StrictMode subscriptions and batches synchronous mutations", async () => {
+        const harness = createReactiveWire(initialState);
+        (globalThis as any).Alpine = harness.alpine;
+        let renders = 0;
+        function Counter() {
+            const wire = useWire<StateWire>();
+            renders++;
+            return <output data-testid="value">{wire.count}</output>;
+        }
+        const view = render(<StrictMode>{provider(harness.wire, <Counter />)}</StrictMode>);
+        expect(harness.activeEffects.size).toBe(1);
+        const before = renders;
+        await act(async () => { harness.wire.count++; harness.wire.count++; });
+        expect(view.getByTestId("value").textContent).toBe("2");
+        expect(renders - before).toBe(2); // StrictMode renders each update twice.
+        view.unmount();
         expect(harness.activeEffects.size).toBe(0);
     });
 });

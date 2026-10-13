@@ -31,7 +31,8 @@ new class extends Component {
 </main>
 
 <script lang="tsx" bridge:react="app">
-    import { useRef } from "react";
+    import { useRef, useEffect } from "react";
+    import "./bridge-fixture.css";
     import { useWire } from "@petecoop/livewire-bridge/react";
 
     type FixtureWire = {
@@ -41,11 +42,15 @@ new class extends Component {
 
     export default function BrowserFixture() {
         const $wire = useWire<FixtureWire>();
+        useEffect(() => {
+            (window as any).__bridgeActiveMounts = ((window as any).__bridgeActiveMounts ?? 0) + 1;
+            return () => { (window as any).__bridgeActiveMounts--; };
+        }, []);
         const renders = useRef(0);
         renders.current++;
 
         return (
-            <section>
+            <section className="bridge-fixture">
                 <button type="button" onClick={() => $wire.count++} data-testid="react-counter">
                     React: {$wire.count}
                 </button>

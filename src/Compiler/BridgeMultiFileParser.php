@@ -3,6 +3,7 @@
 namespace LivewireBridge\Compiler;
 
 use Livewire\Compiler\Compiler;
+use LivewireBridge\BridgeAssets;
 use Livewire\Compiler\Parser\MultiFileParser;
 
 class BridgeMultiFileParser extends MultiFileParser
@@ -63,16 +64,19 @@ class BridgeMultiFileParser extends MultiFileParser
 
     public function generateScriptContents(): ?string
     {
+        // The view uses Livewire's inline script effect; no intermediary JS module.
+        return null;
+    }
+
+    public function generateViewContents(): string
+    {
         $relativePath = str_replace(
             '\\',
             '/',
             ltrim(str_replace(base_path(), '', $this->bridgeScriptPath), DIRECTORY_SEPARATOR),
         );
-        $source = rtrim(strtr(base64_encode($relativePath), '+/', '-_'), '=');
-        $moduleUrl = route('livewire-bridge.module', ['source' => $source], false);
-        $specifier = json_encode($moduleUrl, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
-        return "export { run } from {$specifier};\n";
+        return parent::generateViewContents()."\n".BridgeAssets::blade($relativePath);
     }
 
     private static function hasModuleImport(string $source): bool

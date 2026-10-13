@@ -16,6 +16,8 @@ export type Wire = Record<string, any> & {
 
 type LivewireComponent = {
     reactive: Record<string, unknown>;
+    el?: Element;
+    addCleanup?: (callback: () => void) => (() => void);
 };
 
 type AlpineEffectRunner = object | (() => void);
@@ -40,6 +42,29 @@ type WireSubscription = {
 };
 
 type ReactivePath = readonly string[];
+type Dependency = {
+    path: ReactivePath;
+    kind: "get" | "keys" | "has";
+    property?: PropertyKey;
+    value: unknown;
+};
+
+function readDependency(state: Record<string, unknown>, dependency: Dependency): unknown {
+    const value = readReactivePath(state, dependency.path);
+    if (dependency.kind === "get") return value;
+    if (value === null || typeof value !== "object") return undefined;
+    return dependency.kind === "keys"
+        ? Reflect.ownKeys(value)
+        : Reflect.has(value, dependency.property!);
+}
+
+function equalValue(dependency: Dependency, value: unknown): boolean {
+    if (dependency.kind !== "keys" || !Array.isArray(value) || !Array.isArray(dependency.value)) {
+        return Object.is(dependency.value, value);
+    }
+    return value.length === dependency.value.length
+        && value.every((key, index) => key === (dependency.value as PropertyKey[])[index]);
+}
 
 const WireContext = createContext<WireStore | null>(null);
 
@@ -70,17 +95,30 @@ function createTrackedSubscription<TWire extends Wire>(
 ): WireSubscription {
     const listeners = new Set<() => void>();
     const proxyCache = new WeakMap<object, Map<string, object>>();
-    let renderPaths = new Map<string, ReactivePath>();
-    let committedPaths = new Map<string, ReactivePath>();
+    let renderPaths = new Map<string, Dependency>();
+    let committedPaths = new Map<string, Dependency>();
     let collecting = false;
     let effectRunner: AlpineEffectRunner | null = null;
     let effectGeneration = 0;
     const queuedGenerations = new Set<number>();
     let version = 0;
 
-    const notify = (): void => {
-        version += 1;
+    // Read synchronously as well as through Alpine's scheduled effect. React must
+    // be able to detect a store change between rendering and subscribing.
+    const refreshSnapshot = (): boolean => {
+        let changed = false;
+        for (const dependency of committedPaths.values()) {
+            const value = readDependency(store.reactive, dependency);
+            if (!equalValue(dependency, value)) {
+                dependency.value = value;
+                changed = true;
+            }
+        }
+        if (changed) version += 1;
+        return changed;
+    };
 
+    const notify = (): void => {
         for (const listener of listeners) {
             listener();
         }
@@ -119,29 +157,20 @@ function createTrackedSubscription<TWire extends Wire>(
         }
 
         const generation = effectGeneration;
-        const paths = [...committedPaths.values()];
-        let initialized = false;
-
         effectRunner = store.alpine.effect(() => {
-            for (const path of paths) {
-                readReactivePath(store.reactive, path);
-            }
-
-            if (!initialized) {
-                initialized = true;
-                return;
-            }
-
-            scheduleNotify(generation);
+            if (refreshSnapshot()) scheduleNotify(generation);
         });
     };
 
-    const recordPath = (path: ReactivePath): void => {
-        if (!collecting || !isReactivePath(store.reactive, path)) {
-            return;
-        }
-
-        renderPaths.set(JSON.stringify(path), path);
+    const recordPath = (
+        path: ReactivePath,
+        value: unknown,
+        kind: Dependency["kind"] = "get",
+        property?: PropertyKey,
+    ): void => {
+        if (!collecting || !isReactivePath(store.reactive, path)) return;
+        const key = JSON.stringify([kind, path, typeof property, String(property)]);
+        renderPaths.set(key, { path, kind, property, value });
     };
 
     const wrap = (target: object, path: ReactivePath): object => {
@@ -160,10 +189,27 @@ function createTrackedSubscription<TWire extends Wire>(
         }
 
         const proxy = new Proxy(target, {
+            ownKeys(proxyTarget) {
+                const keys = Reflect.ownKeys(proxyTarget);
+                recordPath(path, keys, "keys");
+                return keys;
+            },
+            has(proxyTarget, property) {
+                const value = Reflect.has(proxyTarget, property);
+                recordPath(path, value, "has", property);
+                return value;
+            },
             deleteProperty(proxyTarget, property) {
                 return Reflect.deleteProperty(proxyTarget, property);
             },
             get(proxyTarget, property, receiver) {
+                // Vue's instrumented array methods can read the raw array and
+                // bypass this tracking proxy. Native methods use this proxy as
+                // their receiver, tracking length, indices and nested values.
+                if (Array.isArray(proxyTarget) && !Object.hasOwn(proxyTarget, property)) {
+                    const method = Reflect.get(Array.prototype, property);
+                    if (typeof method === "function") return method;
+                }
                 const value = Reflect.get(proxyTarget, property, receiver);
 
                 if (typeof property !== "string" || shouldIgnoreProperty(property)) {
@@ -173,7 +219,7 @@ function createTrackedSubscription<TWire extends Wire>(
                 const nextPath = [...path, property];
 
                 if (typeof value !== "function") {
-                    recordPath(nextPath);
+                    recordPath(nextPath, value);
                 }
 
                 return isTrackableObject(value) ? wrap(value, nextPath) : value;
@@ -199,14 +245,16 @@ function createTrackedSubscription<TWire extends Wire>(
         commitRender() {
             collecting = false;
 
-            if (samePaths(renderPaths, committedPaths)) {
-                return;
-            }
-
+            const pathsChanged = !samePaths(renderPaths, committedPaths);
             committedPaths = renderPaths;
-            startEffect();
+            // Preserve the values actually rendered until this comparison, even
+            // when the dependency paths did not change.
+            const changed = refreshSnapshot();
+            if (pathsChanged) startEffect();
+            if (changed) scheduleNotify(effectGeneration);
         },
         getSnapshot() {
+            refreshSnapshot();
             return version;
         },
         subscribe(listener) {
@@ -272,8 +320,8 @@ function isTrackableObject(value: unknown): value is object {
 }
 
 function samePaths(
-    left: Map<string, ReactivePath>,
-    right: Map<string, ReactivePath>,
+    left: Map<string, Dependency>,
+    right: Map<string, Dependency>,
 ): boolean {
     if (left.size !== right.size) {
         return false;

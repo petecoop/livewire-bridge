@@ -51,12 +51,13 @@ it('decorates Livewire compilation for bridge-compatible MFC scripts', function 
     ] as [$name, $extension, $script]) {
         $path = makeMultiFileFixture($name, $extension, $script);
         $class = $compiler->compile($path);
-        $compiledScript = file_get_contents($compiler->cacheManager->getScriptPath($path));
+        $compiledView = file_get_contents($compiler->cacheManager->getViewPath($path));
 
-        expect($compiledScript)
-            ->toStartWith('export { run } from "/livewire-')
-            ->toContain('/bridge/')
-            ->and(method_exists(new $class, 'scriptModuleSrc'))->toBeTrue();
+        expect($compiledView)
+            ->toContain('BridgeAssets::url(')
+            ->toContain('@script')
+            ->not->toContain('/bridge/')
+            ->and(method_exists(new $class, 'scriptModuleSrc'))->toBeFalse();
     }
 });
 
@@ -74,7 +75,9 @@ it('leaves plain MFC JavaScript on Livewire\'s native compiler path', function (
 it('compiles marked scripts into the Livewire module bridge', function () {
     $this->get('/')
         ->assertOk()
-        ->assertSee('scriptModule', escape: false)
+        ->assertSee('scripts', escape: false)
+        ->assertDontSee('scriptModule', escape: false)
+        ->assertDontSee('/bridge/', escape: false)
         ->assertDontSee('bridge:react=', escape: false);
 });
 
@@ -97,8 +100,9 @@ it('compiles bridge scripts in class component Blade views', function () {
     $compiled = $compiler->compileString($filesystem->get($path));
 
     expect($compiled)
-        ->toContain('/bridge/'.rtrim(strtr(base64_encode('resources/views/livewire/class-counter.blade.php'), '+/', '-_'), '=').'.js')
-        ->toContain('import("/livewire-')
+        ->toContain("BridgeAssets::url('resources/views/livewire/class-counter.blade.php')")
+        ->toContain('BridgeAssets::register($this,')
+        ->not->toContain('/bridge/')
         ->not->toContain('import { run as runBridgeModule }')
         ->not->toContain('bridge:react="widget"');
 });

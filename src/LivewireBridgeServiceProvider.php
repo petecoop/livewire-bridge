@@ -68,39 +68,22 @@ class LivewireBridgeServiceProvider extends ServiceProvider
         }
 
         $relativePath = str_replace('\\', '/', ltrim(str_replace(base_path(), '', $path), DIRECTORY_SEPARATOR));
-        $source = $this->encodeSource($relativePath);
-        $moduleUrl = route('livewire-bridge.module', ['source' => $source], false);
-        $specifier = json_encode($moduleUrl, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        $pattern = '/<script\b(?=[^>]*(?:\sbridge(?:\s|=|>)|\sbridge:react\s*=))[^>]*>.*?<\/script>/s';
 
         $contents = preg_replace_callback(
             '/@script\b.*?@endscript/s',
-            fn (array $matches): string => $this->replaceBridgeScriptTag($matches[0], $specifier, dynamic: true),
+            fn (array $matches): string => preg_replace_callback(
+                $pattern,
+                fn (): string => BridgeAssets::blade($relativePath, insideScript: true),
+                $matches[0],
+                1,
+            ),
             $contents,
         ) ?? $contents;
 
-        return $this->replaceBridgeScriptTag($contents, $specifier);
-    }
-
-    private function replaceBridgeScriptTag(string $contents, string $specifier, bool $dynamic = false): string
-    {
-        $replacement = $dynamic
-            ? <<<HTML
-            <script>
-                import({$specifier}).then(({ run: runBridgeModule }) => {
-                    runBridgeModule.call(this, \$wire, \$js);
-                });
-            </script>
-            HTML
-            : <<<HTML
-            <script>
-                import { run as runBridgeModule } from {$specifier};
-                runBridgeModule.call(this, \$wire, \$js);
-            </script>
-            HTML;
-
-        return preg_replace(
-            '/<script\b(?=[^>]*(?:\sbridge(?:\s|=|>)|\sbridge:react\s*=))[^>]*>.*?<\/script>/s',
-            $replacement,
+        return preg_replace_callback(
+            $pattern,
+            fn (): string => BridgeAssets::blade($relativePath),
             $contents,
             1,
         ) ?? $contents;

@@ -1,3 +1,4 @@
+import "../bridge-fixture.css";
 import { useWire } from "@petecoop/livewire-bridge/react";
 
 export const wireRef = "counter-widget";

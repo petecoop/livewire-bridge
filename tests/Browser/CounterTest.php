@@ -92,3 +92,41 @@ it('leaves unmarked class component scripts on the native Livewire path', functi
         ->assertSeeIn('@unmarked-script-wire-counter', 'Alpine: 2')
         ->assertNoJavaScriptErrors();
 })->group('browser');
+
+
+it('loads one component entry and shared JavaScript without wrapper requests', function () {
+    $page = visit('/')->assertSeeIn('@react-counter', 'React: 0');
+    $page->assertScript(<<<'JS'
+        performance.getEntriesByType('resource').filter(entry => new URL(entry.name).pathname.startsWith('/build/') && new URL(entry.name).pathname.endsWith('.js')).length
+    JS, 2)->assertScript(<<<'JS'
+        performance.getEntriesByType('resource').some(entry => /\/bridge\/|\/js\/pages/.test(new URL(entry.name).pathname))
+    JS, false)->assertScript(<<<'JS'
+        getComputedStyle(document.querySelector('.bridge-fixture')).color
+    JS, 'rgb(17, 34, 51)')->assertNoJavaScriptErrors();
+})->group('browser');
+
+it('releases React effects during navigation and remounts cleanly', function () {
+    visit('/')->assertSeeIn('@react-counter', 'React: 0')
+        ->assertScript('window.__bridgeActiveMounts', 1)
+        ->click('@navigate-away')->assertSeeIn('@other-page', 'Navigation target')
+        ->assertScript('window.__bridgeActiveMounts', 0)
+        ->click('@navigate-back')->assertSeeIn('@react-counter', 'React: 0')
+        ->assertScript('window.__bridgeActiveMounts', 1)
+        ->assertScript("getComputedStyle(document.querySelector('.bridge-fixture')).color", 'rgb(17, 34, 51)')
+        ->assertNoJavaScriptErrors();
+})->group('browser');
+
+
+it('loads assets for newly inserted components and deduplicates shared CSS', function () {
+    visit('/host')->click('@toggle-child')
+        ->assertSeeIn('@react-counter', 'React: 0')
+        ->assertScript('window.__bridgeActiveMounts', 1)
+        ->assertScript("getComputedStyle(document.querySelector('.bridge-fixture')).color", 'rgb(17, 34, 51)')
+        ->click('@toggle-other')->assertSeeIn('@mfc-react-counter', 'React: 0')
+        ->assertCount('link[rel="stylesheet"][href*="bridge-fixture"]', 1)
+        ->click('@toggle-child')->assertScript('window.__bridgeActiveMounts', 0)
+        ->click('@toggle-child')->assertSeeIn('@react-counter', 'React: 0')
+        ->assertScript('window.__bridgeActiveMounts', 1)
+        ->assertCount('link[rel="stylesheet"][href*="bridge-fixture"]', 1)
+        ->assertNoJavaScriptErrors();
+})->group('browser');

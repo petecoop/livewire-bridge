@@ -1,14 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Plugin, ResolvedConfig } from "vite";
-import { createGenericEntryModule } from "./entries/generic";
+import { transformGenericEntry } from "./entries/generic";
 import { createReactEntryModule } from "./entries/react";
 
 const entrySuffix = ".livewire-entry.tsx";
 const componentSuffix = ".livewire-component.tsx";
 const entryPrefix = "/@livewire-bridge/";
 const reactComponentPrefix = "/@livewire-bridge-component/";
-const reactModule = "@petecoop/livewire-bridge/react";
 
 export const livewirePaths = [
     "resources/views/components",
@@ -188,16 +187,13 @@ export default function livewireBridge(pluginOptions: LivewireBridgeOptions = {}
             }
 
             if (definition.type === "vite") {
-                return {
-                    code: createGenericEntryModule(definition.code),
-                    map: null,
-                };
+                return transformGenericEntry(definition.code, id);
             }
 
             return {
                 code: createReactEntryModule({
                     reactComponentPrefix,
-                    reactModule,
+                    reactModule: "@petecoop/livewire-bridge/mount",
                     ref: definition.ref,
                     source: encodeSource(relativePath),
                 }),
